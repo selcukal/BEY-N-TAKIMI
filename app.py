@@ -12,10 +12,10 @@ ELEVENLABS_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
 
 VOICE_IDS = {
     "chatgpt":  "ErXwobaYiN019PkySvjV",
-    "claude":   "EXAVITQu4vr4xnSDxMaL",
+    "claude":   "VR6AewLTigWG4xSOukaG",
     "gemini":   "TxGEqnHWrfWFTfGW9XjX",
-    "deepseek": "MF3mGyEYCl7XYWbV9V6O",
-    "judge":    "21m00Tcm4TlvDq8ikWAM",
+    "deepseek": "VR6AewLTigWG4xSOukaG",
+    "judge":    "EXAVITQu4vr4xnSDxMaL",
 }
 
 def ask_chatgpt(system, user):
@@ -103,9 +103,10 @@ def api_judge():
     q, ans, crits = d.get("question",""), d.get("answer",""), d.get("critiques",{})
     cb = "\n\n".join(f"### {v['name']}\n{v['text']}" for v in crits.values()) or "(yok)"
     msg = f"SORU:\n{q}\n\nANA CEVAP:\n{ans}\n\nELESTIRILER:\n{cb}"
+    judge_model, _ = pick_model(q)
     try:
-        final = ask_claude("Sen hakemsin. Tum girdileri sentezle, kullaniciya yonelik tek nihai cevap yaz. Sesle okunacak, kisa paragraflar yaz. Sureci anlatma.", msg)
-        return jsonify({"final": final})
+        final = MODELS[judge_model]("Sen hakemsin. Tum girdileri sentezle, kullaniciya yonelik tek nihai cevap yaz. Sesle okunacak, kisa paragraflar yaz. Sureci anlatma.", msg)
+        return jsonify({"final": final, "judge_model": judge_model, "judge_name": NAMES[judge_model]})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
