@@ -36,6 +36,7 @@ MODELS = {"chatgpt": ask_chatgpt, "claude": ask_claude, "gemini": ask_gemini, "d
 NAMES = {"chatgpt":"ChatGPT", "claude":"Claude", "gemini":"Gemini", "deepseek":"DeepSeek"}
 COLORS = {"chatgpt":"#10a37f", "claude":"#c87557", "gemini":"#4285f4", "deepseek":"#7c3aed"}
 ICONS = {"chatgpt":"⚡", "claude":"🎭", "gemini":"✨", "deepseek":"🔬"}
+VOICES = {"chatgpt":"tr-TR-Male", "claude":"tr-TR-Female", "gemini":"tr-TR-Male2", "deepseek":"tr-TR-Female2"}
 
 EXPERTISE = """- chatgpt: genel kültür, yaratıcı yazım, sohbet
 - claude: uzun analiz, etik, kod incelemesi, yapılandırılmış düşünme
@@ -71,28 +72,22 @@ def api_answer():
     q, model = d.get("question","").strip(), d.get("model","")
     if not q or model not in MODELS: return jsonify({"error":"Eksik"}), 400
     try:
-        ans = MODELS[model]("Sen uzman bir asistansin. Net ve dogru cevap ver.", q)
+        ans = MODELS[model]("Sen uzman bir asistansin. Net ve dogru cevap ver. Sesle okunacak, kisa paragraflar yaz.", q)
         return jsonify({"answer": ans})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/critique", methods=["POST"])
-def api_critique():
+@app.route("/api/critique_one", methods=["POST"])
+def api_critique_one():
     d = request.json
-    q, ans, primary = d.get("question",""), d.get("answer",""), d.get("primary","")
-    critics = [m for m in MODELS if m != primary]
-    results = {}
-    def crit(m):
-        try:
-            return m, MODELS[m]("Sen elestirmensin. 4-5 cumlede dogru ve eksik noktalari soyle.",
-                f"SORU:\n{q}\n\nCEVAP:\n{ans}")
-        except Exception as e:
-            return m, f"[Bu model su an cevap veremedi]"
-    with ThreadPoolExecutor(max_workers=3) as ex:
-        for f in as_completed([ex.submit(crit, m) for m in critics]):
-            k, v = f.result()
-            results[k] = {"name": NAMES[k], "text": v, "color": COLORS[k], "icon": ICONS[k]}
-    return jsonify({"critiques": results})
+    q, ans, critic = d.get("question",""), d.get("answer",""), d.get("critic","")
+    if critic not in MODELS: return jsonify({"error":"Yanlis model"}), 400
+    try:
+        text = MODELS[critic]("Sen elestirmensin. 3-4 kisa cumlede dogru ve eksik noktalari soyle. Sesle okunacak.",
+            f"SORU:\n{q}\n\nCEVAP:\n{ans}")
+        return jsonify({"text": text, "name": NAMES[critic], "color": COLORS[critic], "icon": ICONS[critic]})
+    except Exception as e:
+        return jsonify({"text": f"[Bu model su an cevap veremedi: {e}]", "name": NAMES[critic], "color": COLORS[critic], "icon": ICONS[critic]})
 
 @app.route("/api/judge", methods=["POST"])
 def api_judge():
@@ -101,8 +96,19 @@ def api_judge():
     cb = "\n\n".join(f"### {v['name']}\n{v['text']}" for v in crits.values()) or "(yok)"
     msg = f"SORU:\n{q}\n\nANA CEVAP:\n{ans}\n\nELESTIRILER:\n{cb}"
     try:
-        final = ask_claude("Sen hakemsin. Tum girdileri sentezle, kullaniciya yonelik tek nihai cevap yaz. Sureci anlatma.", msg)
+        final = ask_claude("Sen hakemsin. Tum girdileri sentezle, kullaniciya yonelik tek nihai cevap yaz. Sesle okunacak, kisa paragraflar yaz. Sureci anlatma.", msg)
         return jsonify({"final": final})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/transcribe", methods=["POST"])
+def api_transcribe():
+    if 'audio' not in request.files: return jsonify({"error":"ses yok"}), 400
+    f = request.files['audio']
+    try:
+        c = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        r = c.audio.transcriptions.create(model="whisper-1", file=("audio.webm", f.read(), "audio/webm"), language="tr")
+        return jsonify({"text": r.text})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -110,9 +116,9 @@ HTML = """<!DOCTYPE html><html lang="tr"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="AI Council">
-<title>AI Council</title>
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230a0a0b'/%3E%3Ctext x='50' y='68' text-anchor='middle' font-size='60'%3E🏛️%3C/text%3E%3C/svg%3E">
+<meta name="apple-mobile-web-app-title" content="Beyin Takımı">
+<title>Beyin Takımı</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230a0a0b'/%3E%3Ctext x='50' y='68' text-anchor='middle' font-size='60'%3E🧠%3C/text%3E%3C/svg%3E">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{--bg:#0a0a0b;--panel:#141417;--border:#26262b;--text:#ededee;--muted:#888;--accent:#c87557}
@@ -127,6 +133,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;backgroun
 .main{flex:1;display:flex;flex-direction:column;height:100vh;overflow:hidden}
 .header{padding:1rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .header h1{font-size:1.1rem;display:flex;align-items:center;gap:.5rem}
+.voice-toggle{background:transparent;border:1px solid var(--border);color:var(--text);padding:.4rem .8rem;border-radius:8px;cursor:pointer;font-size:.85rem}
+.voice-toggle.active{background:var(--accent);border-color:var(--accent)}
 .content{flex:1;overflow-y:auto;padding:1.5rem;max-width:900px;width:100%;margin:0 auto}
 .input-area{padding:1rem 1.5rem;border-top:1px solid var(--border);background:var(--bg)}
 .input-wrap{max-width:900px;margin:0 auto;background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:.8rem}
@@ -134,35 +142,39 @@ body{font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;backgroun
 textarea{width:100%;background:transparent;border:none;color:var(--text);font-size:1rem;resize:none;outline:none;font-family:inherit;min-height:50px;max-height:200px}
 .controls{display:flex;justify-content:space-between;align-items:center;margin-top:.5rem;gap:.5rem;flex-wrap:wrap}
 .model-select{display:flex;gap:.3rem;flex-wrap:wrap}
-.chip{padding:.35rem .7rem;background:transparent;border:1px solid var(--border);border-radius:20px;font-size:.75rem;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:.3rem}
+.chip{padding:.35rem .7rem;background:transparent;border:1px solid var(--border);border-radius:20px;font-size:.75rem;color:var(--muted);cursor:pointer}
 .chip:hover{border-color:var(--text);color:var(--text)}
 .chip.active{background:var(--text);color:var(--bg);border-color:var(--text)}
-.send-btn{background:var(--accent);color:#fff;border:none;padding:.5rem 1.1rem;border-radius:10px;cursor:pointer;font-size:.9rem;font-weight:500}
+.right-btns{display:flex;gap:.4rem}
+.mic-btn,.send-btn,.stop-btn{border:none;padding:.5rem .9rem;border-radius:10px;cursor:pointer;font-size:.9rem;font-weight:500}
+.send-btn{background:var(--accent);color:#fff}
 .send-btn:hover{opacity:.9}
 .send-btn:disabled{background:#444;cursor:not-allowed;opacity:.5}
+.mic-btn{background:transparent;border:1px solid var(--border);color:var(--text)}
+.mic-btn.recording{background:#dc2626;border-color:#dc2626;color:#fff;animation:pulse 1s infinite}
+.stop-btn{background:#dc2626;color:#fff;display:none}
+.stop-btn.visible{display:inline-block}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}
 .step{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:1.1rem;margin-bottom:1rem;animation:fade .4s}
 .step.final{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.step.speaking{box-shadow:0 0 0 2px #4ade80}
 @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1}}
 .step-head{display:flex;align-items:center;gap:.6rem;margin-bottom:.7rem;font-weight:600;font-size:.95rem}
 .step-head .badge{padding:.2rem .55rem;border-radius:6px;font-size:.7rem;font-weight:500;background:#252529;color:var(--muted)}
 .step-content{color:#ccc;line-height:1.65;white-space:pre-wrap;font-size:.95rem}
-.meta{color:var(--muted);font-size:.8rem;margin-bottom:.5rem}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid #333;border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.crit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:.7rem}
-.crit{background:#1a1a1d;border-radius:10px;padding:.8rem;border-left:3px solid}
-.crit-name{font-weight:600;margin-bottom:.4rem;font-size:.85rem;display:flex;align-items:center;gap:.3rem}
-.empty{text-align:center;color:var(--muted);padding:3rem 1rem;font-size:.95rem}
+.empty{text-align:center;color:var(--muted);padding:3rem 1rem}
 .empty h2{color:var(--text);margin-bottom:.5rem;font-size:1.4rem}
+.meta{color:var(--muted);font-size:.8rem;margin-bottom:.5rem}
 .menu-toggle{display:none;background:none;border:none;color:var(--text);font-size:1.4rem;cursor:pointer}
 @media(max-width:768px){
   body{flex-direction:column}
-  .sidebar{position:fixed;left:-280px;top:0;height:100vh;z-index:100;transition:left .3s;box-shadow:2px 0 20px rgba(0,0,0,.5)}
+  .sidebar{position:fixed;left:-280px;top:0;height:100vh;z-index:100;transition:left .3s}
   .sidebar.open{left:0}
   .menu-toggle{display:block}
   .main{height:100vh}
   .content,.input-area{padding-left:1rem;padding-right:1rem}
-  .crit-grid{grid-template-columns:1fr}
 }
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99}
 .overlay.show{display:block}
@@ -176,18 +188,18 @@ textarea{width:100%;background:transparent;border:none;color:var(--text);font-si
 <main class="main">
   <header class="header">
     <button class="menu-toggle" onclick="toggleMenu()">☰</button>
-    <h1>🏛️ AI Council</h1>
-    <div style="width:24px"></div>
+    <h1>🧠 Beyin Takımı</h1>
+    <button class="voice-toggle active" id="voiceToggle" onclick="toggleVoice()">🔊 Ses Açık</button>
   </header>
   <div class="content" id="content">
     <div class="empty">
       <h2>👋 Hoş geldin</h2>
-      <p>Soru sor, en uygun model cevaplasın.<br>İstersen modeli kendin de seçebilirsin.</p>
+      <p>Yaz veya mikrofona bas, konuş.<br>Cevaplar sesli okunur.</p>
     </div>
   </div>
   <div class="input-area">
     <div class="input-wrap">
-      <textarea id="q" placeholder="Sorunu yaz..." rows="1" oninput="autosize(this)"></textarea>
+      <textarea id="q" placeholder="Sorunu yaz veya mikrofona bas..." rows="1" oninput="autosize(this)"></textarea>
       <div class="controls">
         <div class="model-select">
           <button class="chip active" onclick="setModel('auto', this)">🎯 Otomatik</button>
@@ -196,33 +208,132 @@ textarea{width:100%;background:transparent;border:none;color:var(--text);font-si
           <button class="chip" onclick="setModel('gemini', this)">✨ Gemini</button>
           <button class="chip" onclick="setModel('deepseek', this)">🔬 DeepSeek</button>
         </div>
-        <button class="send-btn" id="sendBtn" onclick="run()">Sor →</button>
+        <div class="right-btns">
+          <button class="stop-btn" id="stopBtn" onclick="stopSpeaking()">⏹ Dur</button>
+          <button class="mic-btn" id="micBtn" onclick="toggleMic()">🎤</button>
+          <button class="send-btn" id="sendBtn" onclick="run()">Sor →</button>
+        </div>
       </div>
     </div>
   </div>
 </main>
 <script>
-let selectedModel = 'auto';
-let history = JSON.parse(localStorage.getItem('ai_council_history') || '[]');
-let currentChatId = null;
-const content = document.getElementById('content');
-const sendBtn = document.getElementById('sendBtn');
-const sidebar = document.getElementById('sidebar');
-const overlay = document.getElementById('overlay');
+let selectedModel='auto';
+let voiceEnabled=true;
+let history=JSON.parse(localStorage.getItem('bt_history')||'[]');
+let currentChatId=null;
+let mediaRecorder=null;
+let audioChunks=[];
+let isRecording=false;
+let speechQueue=[];
+let currentUtterance=null;
+let voices=[];
+
+const content=document.getElementById('content');
+const sendBtn=document.getElementById('sendBtn');
+const micBtn=document.getElementById('micBtn');
+const stopBtn=document.getElementById('stopBtn');
+const sidebar=document.getElementById('sidebar');
+const overlay=document.getElementById('overlay');
+
+function loadVoices(){voices=window.speechSynthesis.getVoices()}
+loadVoices();
+window.speechSynthesis.onvoiceschanged=loadVoices;
+
+function getVoice(model){
+  const trVoices=voices.filter(v=>v.lang.startsWith('tr'));
+  if(trVoices.length===0)return voices[0];
+  const idx={chatgpt:0,claude:1,gemini:2,deepseek:3}[model]||0;
+  return trVoices[idx%trVoices.length];
+}
+
+function speak(text,model,elId){
+  if(!voiceEnabled||!text)return Promise.resolve();
+  return new Promise(resolve=>{
+    const clean=text.replace(/[#*_`]/g,'').replace(/\\n+/g,'. ');
+    const u=new SpeechSynthesisUtterance(clean);
+    const v=getVoice(model);
+    if(v)u.voice=v;
+    u.lang='tr-TR';u.rate=1.05;u.pitch=1;
+    currentUtterance=u;
+    if(elId){const el=document.getElementById(elId);if(el)el.classList.add('speaking')}
+    u.onend=()=>{
+      if(elId){const el=document.getElementById(elId);if(el)el.classList.remove('speaking')}
+      currentUtterance=null;
+      stopBtn.classList.remove('visible');
+      resolve();
+    };
+    u.onerror=()=>{resolve()};
+    stopBtn.classList.add('visible');
+    window.speechSynthesis.speak(u);
+  });
+}
+
+function stopSpeaking(){
+  window.speechSynthesis.cancel();
+  document.querySelectorAll('.step.speaking').forEach(e=>e.classList.remove('speaking'));
+  stopBtn.classList.remove('visible');
+}
+
+function toggleVoice(){
+  voiceEnabled=!voiceEnabled;
+  const btn=document.getElementById('voiceToggle');
+  btn.textContent=voiceEnabled?'🔊 Ses Açık':'🔇 Ses Kapalı';
+  btn.classList.toggle('active',voiceEnabled);
+  if(!voiceEnabled)stopSpeaking();
+}
+
+async function toggleMic(){
+  if(isRecording){
+    mediaRecorder.stop();
+    return;
+  }
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    mediaRecorder=new MediaRecorder(stream);
+    audioChunks=[];
+    mediaRecorder.ondataavailable=e=>audioChunks.push(e.data);
+    mediaRecorder.onstop=async()=>{
+      stream.getTracks().forEach(t=>t.stop());
+      const blob=new Blob(audioChunks,{type:'audio/webm'});
+      const fd=new FormData();
+      fd.append('audio',blob,'audio.webm');
+      micBtn.innerHTML='<span class="spinner"></span>';
+      micBtn.classList.remove('recording');
+      isRecording=false;
+      try{
+        const r=await fetch('/api/transcribe',{method:'POST',body:fd});
+        const d=await r.json();
+        if(d.text){
+          document.getElementById('q').value=d.text;
+          autosize(document.getElementById('q'));
+          run();
+        }else if(d.error){alert('Ses tanıma hatası: '+d.error)}
+      }catch(e){alert('Hata: '+e.message)}
+      micBtn.innerHTML='🎤';
+    };
+    mediaRecorder.start();
+    isRecording=true;
+    micBtn.classList.add('recording');
+    micBtn.innerHTML='⏺';
+  }catch(e){alert('Mikrofon izni reddedildi: '+e.message)}
+}
+
 function autosize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,200)+'px'}
 function toggleMenu(){sidebar.classList.toggle('open');overlay.classList.toggle('show')}
-function setModel(m, btn){selectedModel=m;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));btn.classList.add('active')}
-function newChat(){currentChatId=null;document.getElementById('q').value='';content.innerHTML='<div class="empty"><h2>👋 Yeni sohbet</h2><p>Sorunu yaz.</p></div>';renderHistory();if(window.innerWidth<=768)toggleMenu()}
-function renderHistory(){const h=document.getElementById('history');h.innerHTML=history.slice().reverse().map(c=>`<div class="hist-item ${c.id===currentChatId?'active':''}" onclick="loadChat('${c.id}')">${escapeHtml(c.question.slice(0,40))}${c.question.length>40?'...':''}</div>`).join('')||'<div class="meta" style="padding:.5rem">Henüz sohbet yok</div>'}
+function setModel(m,btn){selectedModel=m;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));btn.classList.add('active')}
+function newChat(){currentChatId=null;document.getElementById('q').value='';content.innerHTML='<div class="empty"><h2>👋 Yeni sohbet</h2><p>Sorunu yaz veya konuş.</p></div>';renderHistory();stopSpeaking();if(window.innerWidth<=768)toggleMenu()}
+function renderHistory(){const h=document.getElementById('history');h.innerHTML=history.slice().reverse().map(c=>`<div class="hist-item ${c.id===currentChatId?'active':''}" onclick="loadChat('${c.id}')">${escapeHtml(c.question.slice(0,40))}${c.question.length>40?'...':''}</div>`).join('')||'<div class="meta" style="padding:.5rem">Henüz yok</div>'}
 function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function loadChat(id){const c=history.find(x=>x.id===id);if(!c)return;currentChatId=id;content.innerHTML=c.html;renderHistory();if(window.innerWidth<=768)toggleMenu()}
-function saveChat(question,html){if(currentChatId){const c=history.find(x=>x.id===currentChatId);if(c){c.question=question;c.html=html}}else{currentChatId=Date.now().toString();history.push({id:currentChatId,question,html})}if(history.length>30)history.shift();localStorage.setItem('ai_council_history',JSON.stringify(history));renderHistory()}
-function step(id,title,contentHtml,meta,color){let el=document.getElementById(id);if(!el){el=document.createElement('div');el.id=id;el.className='step';content.appendChild(el)}el.innerHTML=`<div class="step-head">${title}${meta?'<span class="badge">'+meta+'</span>':''}</div><div class="step-content">${contentHtml}</div>`;if(color)el.style.borderLeft='3px solid '+color;el.scrollIntoView({behavior:'smooth',block:'end'})}
+function saveChat(question,html){if(currentChatId){const c=history.find(x=>x.id===currentChatId);if(c){c.question=question;c.html=html}}else{currentChatId=Date.now().toString();history.push({id:currentChatId,question,html})}if(history.length>30)history.shift();localStorage.setItem('bt_history',JSON.stringify(history));renderHistory()}
+function step(id,title,contentHtml,meta,color){let el=document.getElementById(id);if(!el){el=document.createElement('div');el.id=id;el.className='step';content.appendChild(el)}el.innerHTML=`<div class="step-head">${title}${meta?'<span class="badge">'+meta+'</span>':''}</div><div class="step-content">${contentHtml}</div>`;if(color)el.style.borderLeft='3px solid '+color;el.scrollIntoView({behavior:'smooth',block:'end'});return el}
 function loading(id,title){step(id,title,'<span class="spinner"></span> İşleniyor...')}
 async function api(path,body){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(d.error)throw new Error(d.error);return d}
 async function run(){
   const q=document.getElementById('q').value.trim();if(!q)return;
   content.innerHTML='';sendBtn.disabled=true;sendBtn.innerHTML='<span class="spinner"></span>';
+  stopSpeaking();
   try{
     let chosen,name,reason,color,icon;
     if(selectedModel==='auto'){
@@ -240,21 +351,34 @@ async function run(){
     loading('s2',icon+' '+name);
     const r2=await api('/api/answer',{question:q,model:chosen});
     step('s2',icon+' '+name+' cevaplıyor',r2.answer,'Ana Cevap',color);
-    loading('s3','🔍 Diğer modeller');
-    const r3=await api('/api/critique',{question:q,answer:r2.answer,primary:chosen});
-    let html='<div class="crit-grid">';
-    for(const k in r3.critiques){const c=r3.critiques[k];html+=`<div class="crit" style="border-left-color:${c.color}"><div class="crit-name">${c.icon} ${c.name}</div><div>${escapeHtml(c.text).replace(/\\n/g,'<br>')}</div></div>`}
-    html+='</div>';
-    step('s3','🔍 Eleştiriler',html);
+    await speak(r2.answer,chosen,'s2');
+    
+    const critics=['chatgpt','claude','gemini','deepseek'].filter(m=>m!==chosen);
+    const critiques={};
+    for(const critic of critics){
+      const cid='c_'+critic;
+      loading(cid,'🔍 '+critic.charAt(0).toUpperCase()+critic.slice(1)+' eleştiriyor');
+      try{
+        const cr=await api('/api/critique_one',{question:q,answer:r2.answer,critic});
+        step(cid,cr.icon+' '+cr.name+' eleştirisi',cr.text,'Eleştiri',cr.color);
+        critiques[critic]={name:cr.name,text:cr.text};
+        await speak(cr.text,critic,cid);
+      }catch(e){
+        step(cid,'⚠️ '+critic,'Bu model şu an cevap veremedi.','Eleştiri');
+      }
+    }
+    
     loading('s4','🏛️ Hakem');
-    const r4=await api('/api/judge',{question:q,answer:r2.answer,critiques:r3.critiques});
-    step('s4','🏛️ Nihai Cevap',r4.final,'Sentez','#c87557');
-    document.getElementById('s4').classList.add('final');
+    const r4=await api('/api/judge',{question:q,answer:r2.answer,critiques});
+    const finalEl=step('s4','🏛️ Nihai Cevap',r4.final,'Sentez','#c87557');
+    finalEl.classList.add('final');
+    await speak(r4.final,'claude','s4');
+    
     saveChat(q,content.innerHTML);
     document.getElementById('q').value='';autosize(document.getElementById('q'));
   }catch(e){step('err','⚠️ Hata',e.message)}finally{sendBtn.disabled=false;sendBtn.innerHTML='Sor →'}
 }
-document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();run()}});
+document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();run()}});
 renderHistory();
 </script></body></html>"""
 
