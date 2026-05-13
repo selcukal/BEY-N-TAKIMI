@@ -1,13 +1,22 @@
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, Response
 from openai import OpenAI
 from anthropic import Anthropic
 import google.generativeai as genai
-import os, json, re
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import os, json, re, requests
 from dotenv import load_dotenv
 
 load_dotenv()
 app = Flask(__name__)
+
+ELEVENLABS_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+
+VOICE_IDS = {
+    "chatgpt":  "ErXwobaYiN019PkySvjV",
+    "claude":   "EXAVITQu4vr4xnSDxMaL",
+    "gemini":   "TxGEqnHWrfWFTfGW9XjX",
+    "deepseek": "MF3mGyEYCl7XYWbV9V6O",
+    "judge":    "21m00Tcm4TlvDq8ikWAM",
+}
 
 def ask_chatgpt(system, user):
     c = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
@@ -36,7 +45,6 @@ MODELS = {"chatgpt": ask_chatgpt, "claude": ask_claude, "gemini": ask_gemini, "d
 NAMES = {"chatgpt":"ChatGPT", "claude":"Claude", "gemini":"Gemini", "deepseek":"DeepSeek"}
 COLORS = {"chatgpt":"#10a37f", "claude":"#c87557", "gemini":"#4285f4", "deepseek":"#7c3aed"}
 ICONS = {"chatgpt":"⚡", "claude":"🎭", "gemini":"✨", "deepseek":"🔬"}
-VOICES = {"chatgpt":"tr-TR-Male", "claude":"tr-TR-Female", "gemini":"tr-TR-Male2", "deepseek":"tr-TR-Female2"}
 
 EXPERTISE = """- chatgpt: genel kültür, yaratıcı yazım, sohbet
 - claude: uzun analiz, etik, kod incelemesi, yapılandırılmış düşünme
@@ -87,7 +95,7 @@ def api_critique_one():
             f"SORU:\n{q}\n\nCEVAP:\n{ans}")
         return jsonify({"text": text, "name": NAMES[critic], "color": COLORS[critic], "icon": ICONS[critic]})
     except Exception as e:
-        return jsonify({"text": f"[Bu model su an cevap veremedi: {e}]", "name": NAMES[critic], "color": COLORS[critic], "icon": ICONS[critic]})
+        return jsonify({"text": f"[Bu model su an cevap veremedi]", "name": NAMES[critic], "color": COLORS[critic], "icon": ICONS[critic]})
 
 @app.route("/api/judge", methods=["POST"])
 def api_judge():
@@ -112,6 +120,31 @@ def api_transcribe():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/tts", methods=["POST"])
+def api_tts():
+    d = request.json
+    text = d.get("text","").strip()
+    model = d.get("model","claude")
+    if not text: return jsonify({"error":"metin yok"}), 400
+    if not ELEVENLABS_KEY: return jsonify({"error":"ElevenLabs anahtari yok"}), 500
+    voice_id = VOICE_IDS.get(model, VOICE_IDS["judge"])
+    clean = re.sub(r'[#*_`]', '', text).strip()
+    if len(clean) > 2500: clean = clean[:2500]
+    try:
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream"
+        headers = {"xi-api-key": ELEVENLABS_KEY, "Content-Type": "application/json"}
+        body = {"text": clean, "model_id": "eleven_multilingual_v2",
+                "voice_settings": {"stability":0.5, "similarity_boost":0.75, "speed":1.05}}
+        r = requests.post(url, json=body, headers=headers, stream=True)
+        if r.status_code != 200:
+            return jsonify({"error": f"ElevenLabs hata: {r.status_code} {r.text[:200]}"}), 500
+        def gen():
+            for chunk in r.iter_content(chunk_size=4096):
+                if chunk: yield chunk
+        return Response(gen(), mimetype="audio/mpeg")
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 HTML = """<!DOCTYPE html><html lang="tr"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -126,7 +159,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;backgroun
 .sidebar{width:260px;background:#0f0f11;border-right:1px solid var(--border);padding:1rem;display:flex;flex-direction:column;gap:.5rem;overflow-y:auto;flex-shrink:0}
 .sidebar h2{font-size:.75rem;text-transform:uppercase;color:var(--muted);margin:1rem 0 .5rem;letter-spacing:.5px}
 .new-btn{background:var(--accent);color:#fff;border:none;padding:.7rem;border-radius:10px;cursor:pointer;font-size:.9rem;font-weight:500;margin-bottom:.5rem}
-.new-btn:hover{opacity:.9}
 .hist-item{padding:.6rem .8rem;background:transparent;border-radius:8px;cursor:pointer;font-size:.85rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid transparent}
 .hist-item:hover{background:#1a1a1d;border-color:var(--border)}
 .hist-item.active{background:#1a1a1d;border-color:var(--border)}
@@ -148,7 +180,6 @@ textarea{width:100%;background:transparent;border:none;color:var(--text);font-si
 .right-btns{display:flex;gap:.4rem}
 .mic-btn,.send-btn,.stop-btn{border:none;padding:.5rem .9rem;border-radius:10px;cursor:pointer;font-size:.9rem;font-weight:500}
 .send-btn{background:var(--accent);color:#fff}
-.send-btn:hover{opacity:.9}
 .send-btn:disabled{background:#444;cursor:not-allowed;opacity:.5}
 .mic-btn{background:transparent;border:1px solid var(--border);color:var(--text)}
 .mic-btn.recording{background:#dc2626;border-color:#dc2626;color:#fff;animation:pulse 1s infinite}
@@ -194,7 +225,7 @@ textarea{width:100%;background:transparent;border:none;color:var(--text);font-si
   <div class="content" id="content">
     <div class="empty">
       <h2>👋 Hoş geldin</h2>
-      <p>Yaz veya mikrofona bas, konuş.<br>Cevaplar sesli okunur.</p>
+      <p>Yaz veya mikrofona bas, konuş.<br>Cevaplar gerçekçi seslerle okunur.</p>
     </div>
   </div>
   <div class="input-area">
@@ -222,13 +253,8 @@ let selectedModel='auto';
 let voiceEnabled=true;
 let history=JSON.parse(localStorage.getItem('bt_history')||'[]');
 let currentChatId=null;
-let mediaRecorder=null;
-let audioChunks=[];
-let isRecording=false;
-let speechQueue=[];
-let currentUtterance=null;
-let voices=[];
-
+let mediaRecorder=null,audioChunks=[],isRecording=false;
+let currentAudio=null;
 const content=document.getElementById('content');
 const sendBtn=document.getElementById('sendBtn');
 const micBtn=document.getElementById('micBtn');
@@ -236,41 +262,33 @@ const stopBtn=document.getElementById('stopBtn');
 const sidebar=document.getElementById('sidebar');
 const overlay=document.getElementById('overlay');
 
-function loadVoices(){voices=window.speechSynthesis.getVoices()}
-loadVoices();
-window.speechSynthesis.onvoiceschanged=loadVoices;
-
-function getVoice(model){
-  const trVoices=voices.filter(v=>v.lang.startsWith('tr'));
-  if(trVoices.length===0)return voices[0];
-  const idx={chatgpt:0,claude:1,gemini:2,deepseek:3}[model]||0;
-  return trVoices[idx%trVoices.length];
-}
-
-function speak(text,model,elId){
-  if(!voiceEnabled||!text)return Promise.resolve();
-  return new Promise(resolve=>{
-    const clean=text.replace(/[#*_`]/g,'').replace(/\\n+/g,'. ');
-    const u=new SpeechSynthesisUtterance(clean);
-    const v=getVoice(model);
-    if(v)u.voice=v;
-    u.lang='tr-TR';u.rate=1.05;u.pitch=1;
-    currentUtterance=u;
-    if(elId){const el=document.getElementById(elId);if(el)el.classList.add('speaking')}
-    u.onend=()=>{
-      if(elId){const el=document.getElementById(elId);if(el)el.classList.remove('speaking')}
-      currentUtterance=null;
-      stopBtn.classList.remove('visible');
-      resolve();
-    };
-    u.onerror=()=>{resolve()};
-    stopBtn.classList.add('visible');
-    window.speechSynthesis.speak(u);
+async function speak(text,model,elId){
+  if(!voiceEnabled||!text)return;
+  return new Promise(async(resolve)=>{
+    try{
+      const r=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,model})});
+      if(!r.ok){console.error('TTS hata');resolve();return}
+      const blob=await r.blob();
+      const url=URL.createObjectURL(blob);
+      const audio=new Audio(url);
+      currentAudio=audio;
+      if(elId){const el=document.getElementById(elId);if(el)el.classList.add('speaking')}
+      stopBtn.classList.add('visible');
+      audio.onended=()=>{
+        if(elId){const el=document.getElementById(elId);if(el)el.classList.remove('speaking')}
+        URL.revokeObjectURL(url);
+        currentAudio=null;
+        stopBtn.classList.remove('visible');
+        resolve();
+      };
+      audio.onerror=()=>{URL.revokeObjectURL(url);resolve()};
+      await audio.play();
+    }catch(e){console.error(e);resolve()}
   });
 }
 
 function stopSpeaking(){
-  window.speechSynthesis.cancel();
+  if(currentAudio){currentAudio.pause();currentAudio=null}
   document.querySelectorAll('.step.speaking').forEach(e=>e.classList.remove('speaking'));
   stopBtn.classList.remove('visible');
 }
@@ -284,10 +302,7 @@ function toggleVoice(){
 }
 
 async function toggleMic(){
-  if(isRecording){
-    mediaRecorder.stop();
-    return;
-  }
+  if(isRecording){mediaRecorder.stop();return}
   try{
     const stream=await navigator.mediaDevices.getUserMedia({audio:true});
     mediaRecorder=new MediaRecorder(stream);
@@ -296,27 +311,20 @@ async function toggleMic(){
     mediaRecorder.onstop=async()=>{
       stream.getTracks().forEach(t=>t.stop());
       const blob=new Blob(audioChunks,{type:'audio/webm'});
-      const fd=new FormData();
-      fd.append('audio',blob,'audio.webm');
+      const fd=new FormData();fd.append('audio',blob,'audio.webm');
       micBtn.innerHTML='<span class="spinner"></span>';
       micBtn.classList.remove('recording');
       isRecording=false;
       try{
         const r=await fetch('/api/transcribe',{method:'POST',body:fd});
         const d=await r.json();
-        if(d.text){
-          document.getElementById('q').value=d.text;
-          autosize(document.getElementById('q'));
-          run();
-        }else if(d.error){alert('Ses tanıma hatası: '+d.error)}
+        if(d.text){document.getElementById('q').value=d.text;autosize(document.getElementById('q'));run()}
+        else if(d.error){alert('Ses tanıma hatası: '+d.error)}
       }catch(e){alert('Hata: '+e.message)}
       micBtn.innerHTML='🎤';
     };
-    mediaRecorder.start();
-    isRecording=true;
-    micBtn.classList.add('recording');
-    micBtn.innerHTML='⏺';
-  }catch(e){alert('Mikrofon izni reddedildi: '+e.message)}
+    mediaRecorder.start();isRecording=true;micBtn.classList.add('recording');micBtn.innerHTML='⏺';
+  }catch(e){alert('Mikrofon izni: '+e.message)}
 }
 
 function autosize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,200)+'px'}
@@ -352,7 +360,6 @@ async function run(){
     const r2=await api('/api/answer',{question:q,model:chosen});
     step('s2',icon+' '+name+' cevaplıyor',r2.answer,'Ana Cevap',color);
     await speak(r2.answer,chosen,'s2');
-    
     const critics=['chatgpt','claude','gemini','deepseek'].filter(m=>m!==chosen);
     const critiques={};
     for(const critic of critics){
@@ -363,17 +370,13 @@ async function run(){
         step(cid,cr.icon+' '+cr.name+' eleştirisi',cr.text,'Eleştiri',cr.color);
         critiques[critic]={name:cr.name,text:cr.text};
         await speak(cr.text,critic,cid);
-      }catch(e){
-        step(cid,'⚠️ '+critic,'Bu model şu an cevap veremedi.','Eleştiri');
-      }
+      }catch(e){step(cid,'⚠️ '+critic,'Bu model şu an cevap veremedi.','Eleştiri')}
     }
-    
     loading('s4','🏛️ Hakem');
     const r4=await api('/api/judge',{question:q,answer:r2.answer,critiques});
     const finalEl=step('s4','🏛️ Nihai Cevap',r4.final,'Sentez','#c87557');
     finalEl.classList.add('final');
-    await speak(r4.final,'claude','s4');
-    
+    await speak(r4.final,'judge','s4');
     saveChat(q,content.innerHTML);
     document.getElementById('q').value='';autosize(document.getElementById('q'));
   }catch(e){step('err','⚠️ Hata',e.message)}finally{sendBtn.disabled=false;sendBtn.innerHTML='Sor →'}
