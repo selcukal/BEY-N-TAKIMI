@@ -107,6 +107,37 @@ def api_critique_one():
     except Exception as e:
         return jsonify({"text": "[Bu model su an cevap veremedi]", "name": NAMES[critic], "color": COLORS[critic], "icon": ICONS[critic]})
 
+@app.route("/api/defend", methods=["POST"])
+def api_defend():
+    d = request.json
+    q = d.get("question","")
+    ans = d.get("answer","")
+    crits = d.get("critiques",{})
+    primary = d.get("primary","")
+    if primary not in MODELS: return jsonify({"error":"Yanlis model"}), 400
+    cb = "\n\n".join(f"{v['name']}: {v['text']}" for v in crits.values())
+    msg = f"SORU:\n{q}\n\nVERDIGIN CEVAP:\n{ans}\n\nELESTIRILER:\n{cb}\n\nElestirilere yanit ver. Hakli noktalari kabul et, yanlis bulduklarini gerekceyle reddet. 4-5 cumle."
+    try:
+        text = MODELS[primary]("Sen daha once cevap vermistin. Simdi elestirilere yanit veriyorsun.", msg)
+        return jsonify({"text": text, "name": NAMES[primary], "color": COLORS[primary], "icon": ICONS[primary]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/critique_round2", methods=["POST"])
+def api_critique_round2():
+    d = request.json
+    q = d.get("question","")
+    ans = d.get("answer","")
+    defense = d.get("defense","")
+    critic = d.get("critic","")
+    if critic not in MODELS: return jsonify({"error":"Yanlis model"}), 400
+    try:
+        text = MODELS[critic]("Sen elestirmensin. Soruyu, ilk cevabi ve savunmayi gor. Savunmanin tatmin edici olup olmadigini soyle. 3-4 cumle.",
+            f"SORU:\n{q}\n\nILK CEVAP:\n{ans}\n\nSAVUNMA:\n{defense}")
+        return jsonify({"text": text, "name": NAMES[critic], "color": COLORS[critic], "icon": ICONS[critic]})
+    except Exception as e:
+        return jsonify({"text": "[Bu model su an cevap veremedi]", "name": NAMES[critic], "color": COLORS[critic], "icon": ICONS[critic]})
+
 @app.route("/api/judge", methods=["POST"])
 def api_judge():
     d = request.json
@@ -235,7 +266,10 @@ textarea{width:100%;background:transparent;border:none;color:var(--text);font-si
   <header class="header">
     <button class="menu-toggle" onclick="toggleMenu()">☰</button>
     <h1>🧠 Beyin Takımı</h1>
-    <button class="voice-toggle active" id="voiceToggle" onclick="toggleVoice()">🔊 Ses Açık</button>
+    <div style="display:flex;gap:.4rem">
+      <button class="voice-toggle" id="debateToggle" onclick="toggleDebate()">🥊 Tartışma Kapalı</button>
+      <button class="voice-toggle active" id="voiceToggle" onclick="toggleVoice()">🔊 Ses Açık</button>
+    </div>
   </header>
   <div class="content" id="content">
     <div class="empty">
@@ -275,6 +309,8 @@ textarea{width:100%;background:transparent;border:none;color:var(--text);font-si
 let selectedModel='auto';
 let selectedMode='normal';
 let voiceEnabled=true;
+let debateEnabled=false;
+function toggleDebate(){debateEnabled=!debateEnabled;const b=document.getElementById('debateToggle');b.textContent=debateEnabled?'🥊 Tartışma Açık':'🥊 Tartışma Kapalı';b.classList.toggle('active',debateEnabled)}
 let history=JSON.parse(localStorage.getItem('bt_history')||'[]');
 let currentChatId=null;
 let mediaRecorder=null,audioChunks=[],isRecording=false;
@@ -370,6 +406,26 @@ async function run(){
         critiques[critic]={name:cr.name,text:cr.text};
         await speak(cr.text,critic,cid);
       }catch(e){step(cid,'⚠️ '+critic,'Bu model şu an cevap veremedi.','Eleştiri')}
+    }
+    if(debateEnabled){
+      loading('d1',icon+' '+name+' savunuyor');
+      try{
+        const dr=await api('/api/defend',{question:q,answer:r2.answer,critiques,primary:chosen});
+        step('d1',dr.icon+' '+dr.name+' savunması',dr.text,'Savunma',dr.color);
+        await speak(dr.text,chosen,'d1');
+        const round2={};
+        for(const critic of critics){
+          const cid2='r2_'+critic;
+          loading(cid2,'⚔️ '+critic.charAt(0).toUpperCase()+critic.slice(1)+' 2. tur');
+          try{
+            const cr2=await api('/api/critique_round2',{question:q,answer:r2.answer,defense:dr.text,critic});
+            step(cid2,cr2.icon+' '+cr2.name+' (2. tur)',cr2.text,'2. Tur',cr2.color);
+            round2[critic]={name:cr2.name,text:cr2.text};
+            await speak(cr2.text,critic,cid2);
+          }catch(e){}
+        }
+        Object.assign(critiques,round2);
+      }catch(e){}
     }
     loading('s4','🏛️ Hakem');
     const r4=await api('/api/judge',{question:q,answer:r2.answer,critiques});
