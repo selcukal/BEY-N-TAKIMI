@@ -18,15 +18,24 @@ VOICE_IDS = {
     "judge":    "EXAVITQu4vr4xnSDxMaL",
 }
 
+MODES = {
+    "normal":    {"name": "Normal",       "icon": "💬", "prompt": "Sen uzman bir asistansin. Net ve dogru cevap ver. Sesle okunacak, kisa paragraflar yaz."},
+    "research":  {"name": "Araştırma",    "icon": "🔍", "prompt": "Sen bir arastirmacisin. Soruyu derinlemesine arastir, kaynaklar ve veriler sun, farkli acilardan analiz et. Yapilandirilmis ve detayli cevap ver."},
+    "ideas":     {"name": "Fikir Üret",   "icon": "💡", "prompt": "Sen yaratici bir fikir uretecisin. 5-7 farkli yenilikci fikir sun, her birini kisaca acikla, avantaj ve dezavantajlarini belirt."},
+    "critique":  {"name": "Eleştir",      "icon": "⚔️", "prompt": "Sen sert ama yapici bir elestirmensin. Konuyu/fikri/durumu butun zayif yonleri, riskleri, ve hatalariyla acikca elestir. Olumsuz noktalari saklamadan soyle."},
+    "roadmap":   {"name": "Yol Haritası", "icon": "🗺️", "prompt": "Sen bir strateji uzmanisin. Soruyu/hedefi adim adim bir yol haritasina cevir. Asamali plan, tarihler, oncelikler ve kontrol noktalari sun."},
+    "report":    {"name": "Rapor",        "icon": "📊", "prompt": "Sen bir analistsin. Konu hakkinda profesyonel bir rapor yaz: ozet, mevcut durum, analiz, sonuc ve oneriler bolumleriyle."},
+}
+
 def ask_chatgpt(system, user):
     c = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    r = c.chat.completions.create(model="gpt-4o", max_tokens=1500,
+    r = c.chat.completions.create(model="gpt-4o", max_tokens=2000,
         messages=[{"role":"system","content":system},{"role":"user","content":user}])
     return r.choices[0].message.content
 
 def ask_claude(system, user):
     c = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-    r = c.messages.create(model="claude-opus-4-5", max_tokens=1500, system=system,
+    r = c.messages.create(model="claude-opus-4-5", max_tokens=2000, system=system,
         messages=[{"role":"user","content":user}])
     return r.content[0].text
 
@@ -37,7 +46,7 @@ def ask_gemini(system, user):
 
 def ask_deepseek(system, user):
     c = OpenAI(api_key=os.environ["DEEPSEEK_API_KEY"], base_url="https://api.deepseek.com/v1")
-    r = c.chat.completions.create(model="deepseek-chat", max_tokens=1500,
+    r = c.chat.completions.create(model="deepseek-chat", max_tokens=2000,
         messages=[{"role":"system","content":system},{"role":"user","content":user}])
     return r.choices[0].message.content
 
@@ -77,10 +86,11 @@ def api_route():
 @app.route("/api/answer", methods=["POST"])
 def api_answer():
     d = request.json
-    q, model = d.get("question","").strip(), d.get("model","")
+    q, model, mode = d.get("question","").strip(), d.get("model",""), d.get("mode","normal")
     if not q or model not in MODELS: return jsonify({"error":"Eksik"}), 400
+    prompt = MODES.get(mode, MODES["normal"])["prompt"]
     try:
-        ans = MODELS[model]("Sen uzman bir asistansin. Net ve dogru cevap ver. Sesle okunacak, kisa paragraflar yaz.", q)
+        ans = MODELS[model](prompt, q)
         return jsonify({"answer": ans})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -95,7 +105,7 @@ def api_critique_one():
             f"SORU:\n{q}\n\nCEVAP:\n{ans}")
         return jsonify({"text": text, "name": NAMES[critic], "color": COLORS[critic], "icon": ICONS[critic]})
     except Exception as e:
-        return jsonify({"text": f"[Bu model su an cevap veremedi]", "name": NAMES[critic], "color": COLORS[critic], "icon": ICONS[critic]})
+        return jsonify({"text": "[Bu model su an cevap veremedi]", "name": NAMES[critic], "color": COLORS[critic], "icon": ICONS[critic]})
 
 @app.route("/api/judge", methods=["POST"])
 def api_judge():
@@ -135,10 +145,10 @@ def api_tts():
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream"
         headers = {"xi-api-key": ELEVENLABS_KEY, "Content-Type": "application/json"}
         body = {"text": clean, "model_id": "eleven_multilingual_v2",
-                "voice_settings": {"stability":0.5, "similarity_boost":0.75, "speed":1.05}}
+                "voice_settings": {"stability":0.5, "similarity_boost":0.75}}
         r = requests.post(url, json=body, headers=headers, stream=True)
         if r.status_code != 200:
-            return jsonify({"error": f"ElevenLabs hata: {r.status_code} {r.text[:200]}"}), 500
+            return jsonify({"error": f"ElevenLabs hata: {r.status_code}"}), 500
         def gen():
             for chunk in r.iter_content(chunk_size=4096):
                 if chunk: yield chunk
@@ -169,7 +179,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;backgroun
 .voice-toggle{background:transparent;border:1px solid var(--border);color:var(--text);padding:.4rem .8rem;border-radius:8px;cursor:pointer;font-size:.85rem}
 .voice-toggle.active{background:var(--accent);border-color:var(--accent)}
 .content{flex:1;overflow-y:auto;padding:1.5rem;max-width:900px;width:100%;margin:0 auto}
-.input-area{padding:1rem 1.5rem;border-top:1px solid var(--border);background:var(--bg)}
+.mode-bar{padding:.8rem 1.5rem;border-top:1px solid var(--border);background:var(--bg);display:flex;gap:.4rem;overflow-x:auto;flex-wrap:wrap}
+.mode-chip{padding:.4rem .8rem;background:transparent;border:1px solid var(--border);border-radius:20px;font-size:.8rem;color:var(--muted);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:.3rem}
+.mode-chip:hover{border-color:var(--text);color:var(--text)}
+.mode-chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.input-area{padding:.8rem 1.5rem 1rem;border-top:1px solid var(--border);background:var(--bg)}
 .input-wrap{max-width:900px;margin:0 auto;background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:.8rem}
 .input-wrap:focus-within{border-color:var(--accent)}
 textarea{width:100%;background:transparent;border:none;color:var(--text);font-size:1rem;resize:none;outline:none;font-family:inherit;min-height:50px;max-height:200px}
@@ -206,7 +220,7 @@ textarea{width:100%;background:transparent;border:none;color:var(--text);font-si
   .sidebar.open{left:0}
   .menu-toggle{display:block}
   .main{height:100vh}
-  .content,.input-area{padding-left:1rem;padding-right:1rem}
+  .content,.input-area,.mode-bar{padding-left:1rem;padding-right:1rem}
 }
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99}
 .overlay.show{display:block}
@@ -226,8 +240,16 @@ textarea{width:100%;background:transparent;border:none;color:var(--text);font-si
   <div class="content" id="content">
     <div class="empty">
       <h2>👋 Hoş geldin</h2>
-      <p>Yaz veya mikrofona bas, konuş.<br>Cevaplar gerçekçi seslerle okunur.</p>
+      <p>Aşağıdan modu seç, sorunu yaz veya mikrofona bas.<br>Beyin Takımı seninle.</p>
     </div>
+  </div>
+  <div class="mode-bar">
+    <button class="mode-chip active" data-mode="normal" onclick="setMode(this)">💬 Normal</button>
+    <button class="mode-chip" data-mode="research" onclick="setMode(this)">🔍 Araştırma</button>
+    <button class="mode-chip" data-mode="ideas" onclick="setMode(this)">💡 Fikir Üret</button>
+    <button class="mode-chip" data-mode="critique" onclick="setMode(this)">⚔️ Eleştir</button>
+    <button class="mode-chip" data-mode="roadmap" onclick="setMode(this)">🗺️ Yol Haritası</button>
+    <button class="mode-chip" data-mode="report" onclick="setMode(this)">📊 Rapor</button>
   </div>
   <div class="input-area">
     <div class="input-wrap">
@@ -251,6 +273,7 @@ textarea{width:100%;background:transparent;border:none;color:var(--text);font-si
 </main>
 <script>
 let selectedModel='auto';
+let selectedMode='normal';
 let voiceEnabled=true;
 let history=JSON.parse(localStorage.getItem('bt_history')||'[]');
 let currentChatId=null;
@@ -268,69 +291,42 @@ async function speak(text,model,elId){
   return new Promise(async(resolve)=>{
     try{
       const r=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,model})});
-      if(!r.ok){console.error('TTS hata');resolve();return}
+      if(!r.ok){resolve();return}
       const blob=await r.blob();
       const url=URL.createObjectURL(blob);
       const audio=new Audio(url);
       currentAudio=audio;
       if(elId){const el=document.getElementById(elId);if(el)el.classList.add('speaking')}
       stopBtn.classList.add('visible');
-      audio.onended=()=>{
-        if(elId){const el=document.getElementById(elId);if(el)el.classList.remove('speaking')}
-        URL.revokeObjectURL(url);
-        currentAudio=null;
-        stopBtn.classList.remove('visible');
-        resolve();
-      };
+      audio.onended=()=>{if(elId){const el=document.getElementById(elId);if(el)el.classList.remove('speaking')}URL.revokeObjectURL(url);currentAudio=null;stopBtn.classList.remove('visible');resolve()};
       audio.onerror=()=>{URL.revokeObjectURL(url);resolve()};
       await audio.play();
-    }catch(e){console.error(e);resolve()}
+    }catch(e){resolve()}
   });
 }
-
-function stopSpeaking(){
-  if(currentAudio){currentAudio.pause();currentAudio=null}
-  document.querySelectorAll('.step.speaking').forEach(e=>e.classList.remove('speaking'));
-  stopBtn.classList.remove('visible');
-}
-
-function toggleVoice(){
-  voiceEnabled=!voiceEnabled;
-  const btn=document.getElementById('voiceToggle');
-  btn.textContent=voiceEnabled?'🔊 Ses Açık':'🔇 Ses Kapalı';
-  btn.classList.toggle('active',voiceEnabled);
-  if(!voiceEnabled)stopSpeaking();
-}
-
+function stopSpeaking(){if(currentAudio){currentAudio.pause();currentAudio=null}document.querySelectorAll('.step.speaking').forEach(e=>e.classList.remove('speaking'));stopBtn.classList.remove('visible')}
+function toggleVoice(){voiceEnabled=!voiceEnabled;const btn=document.getElementById('voiceToggle');btn.textContent=voiceEnabled?'🔊 Ses Açık':'🔇 Ses Kapalı';btn.classList.toggle('active',voiceEnabled);if(!voiceEnabled)stopSpeaking()}
 async function toggleMic(){
   if(isRecording){mediaRecorder.stop();return}
   try{
     const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    mediaRecorder=new MediaRecorder(stream);
-    audioChunks=[];
+    mediaRecorder=new MediaRecorder(stream);audioChunks=[];
     mediaRecorder.ondataavailable=e=>audioChunks.push(e.data);
     mediaRecorder.onstop=async()=>{
       stream.getTracks().forEach(t=>t.stop());
       const blob=new Blob(audioChunks,{type:'audio/webm'});
       const fd=new FormData();fd.append('audio',blob,'audio.webm');
-      micBtn.innerHTML='<span class="spinner"></span>';
-      micBtn.classList.remove('recording');
-      isRecording=false;
-      try{
-        const r=await fetch('/api/transcribe',{method:'POST',body:fd});
-        const d=await r.json();
-        if(d.text){document.getElementById('q').value=d.text;autosize(document.getElementById('q'));run()}
-        else if(d.error){alert('Ses tanıma hatası: '+d.error)}
-      }catch(e){alert('Hata: '+e.message)}
+      micBtn.innerHTML='<span class="spinner"></span>';micBtn.classList.remove('recording');isRecording=false;
+      try{const r=await fetch('/api/transcribe',{method:'POST',body:fd});const d=await r.json();if(d.text){document.getElementById('q').value=d.text;autosize(document.getElementById('q'));run()}}catch(e){alert('Hata: '+e.message)}
       micBtn.innerHTML='🎤';
     };
     mediaRecorder.start();isRecording=true;micBtn.classList.add('recording');micBtn.innerHTML='⏺';
   }catch(e){alert('Mikrofon izni: '+e.message)}
 }
-
 function autosize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,200)+'px'}
 function toggleMenu(){sidebar.classList.toggle('open');overlay.classList.toggle('show')}
-function setModel(m,btn){selectedModel=m;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));btn.classList.add('active')}
+function setModel(m,btn){selectedModel=m;document.querySelectorAll('.model-select .chip').forEach(c=>c.classList.remove('active'));btn.classList.add('active')}
+function setMode(btn){selectedMode=btn.dataset.mode;document.querySelectorAll('.mode-chip').forEach(c=>c.classList.remove('active'));btn.classList.add('active')}
 function newChat(){currentChatId=null;document.getElementById('q').value='';content.innerHTML='<div class="empty"><h2>👋 Yeni sohbet</h2><p>Sorunu yaz veya konuş.</p></div>';renderHistory();stopSpeaking();if(window.innerWidth<=768)toggleMenu()}
 function renderHistory(){const h=document.getElementById('history');h.innerHTML=history.slice().reverse().map(c=>`<div class="hist-item ${c.id===currentChatId?'active':''}" onclick="loadChat('${c.id}')">${escapeHtml(c.question.slice(0,40))}${c.question.length>40?'...':''}</div>`).join('')||'<div class="meta" style="padding:.5rem">Henüz yok</div>'}
 function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -343,22 +339,24 @@ async function run(){
   const q=document.getElementById('q').value.trim();if(!q)return;
   content.innerHTML='';sendBtn.disabled=true;sendBtn.innerHTML='<span class="spinner"></span>';
   stopSpeaking();
+  const modeIcons={normal:'💬',research:'🔍',ideas:'💡',critique:'⚔️',roadmap:'🗺️',report:'📊'};
+  const modeNames={normal:'Normal',research:'Araştırma',ideas:'Fikir Üret',critique:'Eleştir',roadmap:'Yol Haritası',report:'Rapor'};
   try{
     let chosen,name,reason,color,icon;
     if(selectedModel==='auto'){
       loading('s1','🎯 Yönlendirme');
       const r1=await api('/api/route',{question:q});
       chosen=r1.chosen;name=r1.name;reason=r1.reason;color=r1.color;icon=r1.icon;
-      step('s1','🎯 Yönlendirme',reason,name,color);
+      step('s1','🎯 Yönlendirme',reason,modeIcons[selectedMode]+' '+modeNames[selectedMode]+' • '+name,color);
     }else{
       chosen=selectedModel;
       name={chatgpt:'ChatGPT',claude:'Claude',gemini:'Gemini',deepseek:'DeepSeek'}[chosen];
       color={chatgpt:'#10a37f',claude:'#c87557',gemini:'#4285f4',deepseek:'#7c3aed'}[chosen];
       icon={chatgpt:'⚡',claude:'🎭',gemini:'✨',deepseek:'🔬'}[chosen];
-      step('s1','🎯 Manuel Seçim','Bu modeli sen seçtin.',name,color);
+      step('s1','🎯 Manuel Seçim','Bu modeli sen seçtin.',modeIcons[selectedMode]+' '+modeNames[selectedMode]+' • '+name,color);
     }
     loading('s2',icon+' '+name);
-    const r2=await api('/api/answer',{question:q,model:chosen});
+    const r2=await api('/api/answer',{question:q,model:chosen,mode:selectedMode});
     step('s2',icon+' '+name+' cevaplıyor',r2.answer,'Ana Cevap',color);
     await speak(r2.answer,chosen,'s2');
     const critics=['chatgpt','claude','gemini','deepseek'].filter(m=>m!==chosen);
@@ -375,7 +373,7 @@ async function run(){
     }
     loading('s4','🏛️ Hakem');
     const r4=await api('/api/judge',{question:q,answer:r2.answer,critiques});
-    const finalEl=step('s4','🏛️ Nihai Cevap',r4.final,'Sentez','#c87557');
+    const finalEl=step('s4','🏛️ Nihai Cevap',r4.final,'Hakem: '+r4.judge_name,'#c87557');
     finalEl.classList.add('final');
     await speak(r4.final,'judge','s4');
     saveChat(q,content.innerHTML);
@@ -383,6 +381,7 @@ async function run(){
   }catch(e){step('err','⚠️ Hata',e.message)}finally{sendBtn.disabled=false;sendBtn.innerHTML='Sor →'}
 }
 document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();run()}});
+document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.shiftKey&&e.key.toLowerCase()==='m'){e.preventDefault();document.getElementById('q').focus();toggleMic()}});
 renderHistory();
 </script></body></html>"""
 
