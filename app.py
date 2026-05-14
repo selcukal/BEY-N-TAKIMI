@@ -25,6 +25,7 @@ MODES = {
     "critique":  {"name": "Eleştir",      "icon": "⚔️", "prompt": "Sen sert ama yapici bir elestirmensin. Konuyu/fikri/durumu butun zayif yonleri, riskleri, ve hatalariyla acikca elestir. Olumsuz noktalari saklamadan soyle."},
     "roadmap":   {"name": "Yol Haritası", "icon": "🗺️", "prompt": "Sen bir strateji uzmanisin. Soruyu/hedefi adim adim bir yol haritasina cevir. Asamali plan, tarihler, oncelikler ve kontrol noktalari sun."},
     "report":    {"name": "Rapor",        "icon": "📊", "prompt": "Sen bir analistsin. Konu hakkinda profesyonel bir rapor yaz: ozet, mevcut durum, analiz, sonuc ve oneriler bolumleriyle."},
+    "startup":   {"name": "Startup",      "icon": "🚀", "prompt": "Sen tecrubeli bir girisimcilik mentorisin. Kullanicinin fikrini ya da sorusunu girisimci gozuyle ele al. 1) Fikrin gucu/zayifligi 2) Hedef kitle 3) Gelir modeli 4) Rakipler 5) Ilk 3 adim 6) Riskler 7) Kaynaklar. Sicak, motive edici, gercekci. Yagcilik yapma."},
 }
 
 def ask_chatgpt(system, user):
@@ -168,18 +169,17 @@ def api_tts():
     text = d.get("text","").strip()
     model = d.get("model","claude")
     if not text: return jsonify({"error":"metin yok"}), 400
-    if not ELEVENLABS_KEY: return jsonify({"error":"ElevenLabs anahtari yok"}), 500
+    if not ELEVENLABS_KEY: return jsonify({"error":"key yok"}), 500
     voice_id = VOICE_IDS.get(model, VOICE_IDS["judge"])
     clean = re.sub(r'[#*_`]', '', text).strip()
     if len(clean) > 2500: clean = clean[:2500]
     try:
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream"
         headers = {"xi-api-key": ELEVENLABS_KEY, "Content-Type": "application/json"}
-        body = {"text": clean, "model_id": "eleven_multilingual_v2",
-                "voice_settings": {"stability":0.5, "similarity_boost":0.75}}
+        body = {"text": clean, "model_id": "eleven_multilingual_v2", "voice_settings": {"stability":0.5,"similarity_boost":0.75}}
         r = requests.post(url, json=body, headers=headers, stream=True)
         if r.status_code != 200:
-            return jsonify({"error": f"ElevenLabs hata: {r.status_code}"}), 500
+            return jsonify({"error": f"ElevenLabs: {r.status_code}"}), 500
         def gen():
             for chunk in r.iter_content(chunk_size=4096):
                 if chunk: yield chunk
@@ -191,71 +191,82 @@ HTML = """<!DOCTYPE html><html lang="tr"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Beyin Takımı">
 <title>Beyin Takımı</title>
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230a0a0b'/%3E%3Ctext x='50' y='68' text-anchor='middle' font-size='60'%3E🧠%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ffffff'/%3E%3Ctext x='50' y='72' text-anchor='middle' font-size='68'%3E🧠%3C/text%3E%3C/svg%3E">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-:root{--bg:#0a0a0b;--panel:#141417;--border:#26262b;--text:#ededee;--muted:#888;--accent:#c87557}
-body{font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
-.sidebar{width:260px;background:#0f0f11;border-right:1px solid var(--border);padding:1rem;display:flex;flex-direction:column;gap:.5rem;overflow-y:auto;flex-shrink:0}
-.sidebar h2{font-size:.75rem;text-transform:uppercase;color:var(--muted);margin:1rem 0 .5rem;letter-spacing:.5px}
-.new-btn{background:var(--accent);color:#fff;border:none;padding:.7rem;border-radius:10px;cursor:pointer;font-size:.9rem;font-weight:500;margin-bottom:.5rem}
+:root{--bg:#ffffff;--panel:#f5f5f7;--border:#e5e5ea;--text:#1c1c1e;--muted:#8e8e93;--accent:#c87557;--shadow:0 1px 3px rgba(0,0,0,.06)}
+[data-theme="dark"]{--bg:#0a0a0b;--panel:#141417;--border:#26262b;--text:#ededee;--muted:#888;--shadow:none}
+body{font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;transition:background .2s,color .2s}
+.sidebar{width:260px;background:var(--panel);border-right:1px solid var(--border);padding:1rem;display:flex;flex-direction:column;gap:.5rem;overflow-y:auto;flex-shrink:0}
+.sidebar h2{font-size:.7rem;text-transform:uppercase;color:var(--muted);margin:1rem 0 .5rem;letter-spacing:.5px;font-weight:600}
+.new-btn{background:var(--accent);color:#fff;border:none;padding:.75rem;border-radius:12px;cursor:pointer;font-size:.9rem;font-weight:600;margin-bottom:.5rem}
 .hist-item{padding:.6rem .8rem;background:transparent;border-radius:8px;cursor:pointer;font-size:.85rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid transparent}
-.hist-item:hover{background:#1a1a1d;border-color:var(--border)}
-.hist-item.active{background:#1a1a1d;border-color:var(--border)}
+.hist-item:hover{background:var(--bg);border-color:var(--border)}
+.hist-item.active{background:var(--bg);border-color:var(--border)}
 .main{flex:1;display:flex;flex-direction:column;height:100vh;overflow:hidden}
-.header{padding:1rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-.header h1{font-size:1.1rem;display:flex;align-items:center;gap:.5rem}
-.voice-toggle{background:transparent;border:1px solid var(--border);color:var(--text);padding:.4rem .8rem;border-radius:8px;cursor:pointer;font-size:.85rem}
-.voice-toggle.active{background:var(--accent);border-color:var(--accent)}
+.header{padding:.9rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg)}
+.header h1{font-size:1.1rem;display:flex;align-items:center;gap:.5rem;font-weight:600}
+.head-btns{display:flex;gap:.3rem;align-items:center}
+.icon-btn{background:transparent;border:1px solid var(--border);color:var(--text);padding:.4rem .55rem;border-radius:10px;cursor:pointer;font-size:.9rem}
+.icon-btn:hover{background:var(--panel)}
+.icon-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .content{flex:1;overflow-y:auto;padding:1.5rem;max-width:900px;width:100%;margin:0 auto}
-.mode-bar{padding:.8rem 1.5rem;border-top:1px solid var(--border);background:var(--bg);display:flex;gap:.4rem;overflow-x:auto;flex-wrap:wrap}
-.mode-chip{padding:.4rem .8rem;background:transparent;border:1px solid var(--border);border-radius:20px;font-size:.8rem;color:var(--muted);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:.3rem}
-.mode-chip:hover{border-color:var(--text);color:var(--text)}
-.mode-chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-.input-area{padding:.8rem 1.5rem 1rem;border-top:1px solid var(--border);background:var(--bg)}
-.input-wrap{max-width:900px;margin:0 auto;background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:.8rem}
+.input-area{padding:.75rem 1.5rem 1rem;background:var(--bg);border-top:1px solid var(--border)}
+.input-wrap{max-width:900px;margin:0 auto;background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:.75rem;box-shadow:var(--shadow)}
 .input-wrap:focus-within{border-color:var(--accent)}
-textarea{width:100%;background:transparent;border:none;color:var(--text);font-size:1rem;resize:none;outline:none;font-family:inherit;min-height:50px;max-height:200px}
-.controls{display:flex;justify-content:space-between;align-items:center;margin-top:.5rem;gap:.5rem;flex-wrap:wrap}
-.model-select{display:flex;gap:.3rem;flex-wrap:wrap}
-.chip{padding:.35rem .7rem;background:transparent;border:1px solid var(--border);border-radius:20px;font-size:.75rem;color:var(--muted);cursor:pointer}
-.chip:hover{border-color:var(--text);color:var(--text)}
-.chip.active{background:var(--text);color:var(--bg);border-color:var(--text)}
-.right-btns{display:flex;gap:.4rem}
-.mic-btn,.send-btn,.stop-btn{border:none;padding:.5rem .9rem;border-radius:10px;cursor:pointer;font-size:.9rem;font-weight:500}
+textarea{width:100%;background:transparent;border:none;color:var(--text);font-size:1rem;resize:none;outline:none;font-family:inherit;min-height:46px;max-height:200px}
+.controls{display:flex;justify-content:space-between;align-items:center;margin-top:.5rem;gap:.5rem}
+.selectors{display:flex;gap:.4rem;flex:1;min-width:0}
+.select-wrap{position:relative;flex:1;max-width:160px}
+.select-btn{width:100%;padding:.45rem .7rem;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:.8rem;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:.3rem;font-family:inherit}
+.select-btn:hover{border-color:var(--accent)}
+.select-menu{display:none;position:absolute;bottom:calc(100% + 4px);left:0;right:0;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:.3rem;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:50;min-width:170px;max-height:280px;overflow-y:auto}
+.select-menu.open{display:block}
+.select-item{padding:.5rem .7rem;border-radius:8px;cursor:pointer;font-size:.85rem;display:flex;align-items:center;gap:.5rem}
+.select-item:hover{background:var(--panel)}
+.select-item.active{background:var(--accent);color:#fff}
+.right-btns{display:flex;gap:.4rem;flex-shrink:0}
+.mic-btn,.send-btn,.stop-btn{border:none;padding:.55rem .9rem;border-radius:12px;cursor:pointer;font-size:.95rem;font-weight:600}
 .send-btn{background:var(--accent);color:#fff}
-.send-btn:disabled{background:#444;cursor:not-allowed;opacity:.5}
-.mic-btn{background:transparent;border:1px solid var(--border);color:var(--text)}
+.send-btn:disabled{background:#bbb;cursor:not-allowed;opacity:.6}
+.mic-btn{background:var(--bg);border:1px solid var(--border);color:var(--text)}
 .mic-btn.recording{background:#dc2626;border-color:#dc2626;color:#fff;animation:pulse 1s infinite}
 .stop-btn{background:#dc2626;color:#fff;display:none}
 .stop-btn.visible{display:inline-block}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.7}}
-.step{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:1.1rem;margin-bottom:1rem;animation:fade .4s}
-.step.final{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.step{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:1.1rem;margin-bottom:1rem;animation:fade .4s;box-shadow:var(--shadow)}
+.step.final{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
 .step.speaking{box-shadow:0 0 0 2px #4ade80}
 @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1}}
 .step-head{display:flex;align-items:center;gap:.6rem;margin-bottom:.7rem;font-weight:600;font-size:.95rem}
-.step-head .badge{padding:.2rem .55rem;border-radius:6px;font-size:.7rem;font-weight:500;background:#252529;color:var(--muted)}
-.step-content{color:#ccc;line-height:1.65;white-space:pre-wrap;font-size:.95rem}
-.spinner{display:inline-block;width:14px;height:14px;border:2px solid #333;border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+.step-head .badge{padding:.2rem .55rem;border-radius:6px;font-size:.7rem;font-weight:500;background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+.step-content{color:var(--text);line-height:1.65;white-space:pre-wrap;font-size:.95rem;opacity:.9}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .empty{text-align:center;color:var(--muted);padding:3rem 1rem}
 .empty h2{color:var(--text);margin-bottom:.5rem;font-size:1.4rem}
 .meta{color:var(--muted);font-size:.8rem;margin-bottom:.5rem}
-.menu-toggle{display:none;background:none;border:none;color:var(--text);font-size:1.4rem;cursor:pointer}
+.menu-toggle{display:none;background:none;border:none;color:var(--text);font-size:1.4rem;cursor:pointer;padding:0}
 @media(max-width:768px){
   body{flex-direction:column}
   .sidebar{position:fixed;left:-280px;top:0;height:100vh;z-index:100;transition:left .3s}
   .sidebar.open{left:0}
   .menu-toggle{display:block}
   .main{height:100vh}
-  .content,.input-area,.mode-bar{padding-left:1rem;padding-right:1rem}
+  .content,.input-area{padding-left:1rem;padding-right:1rem}
+  .header{padding:.7rem 1rem}
+  .header h1{font-size:1rem}
+  .selectors{flex-direction:row}
+  .select-wrap{max-width:none}
+  .select-btn{padding:.4rem .6rem;font-size:.78rem}
+  .send-btn,.mic-btn{padding:.5rem .7rem;font-size:.85rem}
 }
-.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
 .overlay.show{display:block}
-</style></head><body>
+</style></head><body data-theme="light">
 <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
 <aside class="sidebar" id="sidebar">
   <button class="new-btn" onclick="newChat()">+ Yeni Sohbet</button>
@@ -266,38 +277,48 @@ textarea{width:100%;background:transparent;border:none;color:var(--text);font-si
   <header class="header">
     <button class="menu-toggle" onclick="toggleMenu()">☰</button>
     <h1>🧠 Beyin Takımı</h1>
-    <div style="display:flex;gap:.4rem">
-      <button class="voice-toggle" id="debateToggle" onclick="toggleDebate()">🥊 Tartışma Kapalı</button>
-      <button class="voice-toggle active" id="voiceToggle" onclick="toggleVoice()">🔊 Ses Açık</button>
+    <div class="head-btns">
+      <button class="icon-btn" id="themeBtn" onclick="toggleTheme()" title="Tema">☀️</button>
+      <button class="icon-btn" id="debateToggle" onclick="toggleDebate()" title="Derin Tartışma">🥊</button>
+      <button class="icon-btn active" id="voiceToggle" onclick="toggleVoice()" title="Ses">🔊</button>
     </div>
   </header>
   <div class="content" id="content">
     <div class="empty">
-      <h2>👋 Hoş geldin</h2>
-      <p>Aşağıdan modu seç, sorunu yaz veya mikrofona bas.<br>Beyin Takımı seninle.</p>
+      <h2>🧠 Beyin Takımı</h2>
+      <p>Aşağıdan modu ve modeli seç,<br>sorunu yaz veya mikrofona bas.</p>
     </div>
-  </div>
-  <div class="mode-bar">
-    <button class="mode-chip active" data-mode="normal" onclick="setMode(this)">💬 Normal</button>
-    <button class="mode-chip" data-mode="research" onclick="setMode(this)">🔍 Araştırma</button>
-    <button class="mode-chip" data-mode="ideas" onclick="setMode(this)">💡 Fikir Üret</button>
-    <button class="mode-chip" data-mode="critique" onclick="setMode(this)">⚔️ Eleştir</button>
-    <button class="mode-chip" data-mode="roadmap" onclick="setMode(this)">🗺️ Yol Haritası</button>
-    <button class="mode-chip" data-mode="report" onclick="setMode(this)">📊 Rapor</button>
   </div>
   <div class="input-area">
     <div class="input-wrap">
       <textarea id="q" placeholder="Sorunu yaz veya mikrofona bas..." rows="1" oninput="autosize(this)"></textarea>
       <div class="controls">
-        <div class="model-select">
-          <button class="chip active" onclick="setModel('auto', this)">🎯 Otomatik</button>
-          <button class="chip" onclick="setModel('chatgpt', this)">⚡ ChatGPT</button>
-          <button class="chip" onclick="setModel('claude', this)">🎭 Claude</button>
-          <button class="chip" onclick="setModel('gemini', this)">✨ Gemini</button>
-          <button class="chip" onclick="setModel('deepseek', this)">🔬 DeepSeek</button>
+        <div class="selectors">
+          <div class="select-wrap">
+            <button class="select-btn" id="modeBtn" onclick="toggleMenuDrop('modeMenu')">💬 Normal ▾</button>
+            <div class="select-menu" id="modeMenu">
+              <div class="select-item active" data-mode="normal" onclick="pickMode(this,'💬 Normal','normal')">💬 Normal</div>
+              <div class="select-item" data-mode="research" onclick="pickMode(this,'🔍 Araştırma','research')">🔍 Araştırma</div>
+              <div class="select-item" data-mode="ideas" onclick="pickMode(this,'💡 Fikir','ideas')">💡 Fikir Üret</div>
+              <div class="select-item" data-mode="critique" onclick="pickMode(this,'⚔️ Eleştir','critique')">⚔️ Eleştir</div>
+              <div class="select-item" data-mode="roadmap" onclick="pickMode(this,'🗺️ Yol H.','roadmap')">🗺️ Yol Haritası</div>
+              <div class="select-item" data-mode="report" onclick="pickMode(this,'📊 Rapor','report')">📊 Rapor</div>
+              <div class="select-item" data-mode="startup" onclick="pickMode(this,'🚀 Startup','startup')">🚀 Startup</div>
+            </div>
+          </div>
+          <div class="select-wrap">
+            <button class="select-btn" id="modelBtn" onclick="toggleMenuDrop('modelMenu')">🎯 Otomatik ▾</button>
+            <div class="select-menu" id="modelMenu">
+              <div class="select-item active" data-model="auto" onclick="pickModel(this,'🎯 Otomatik','auto')">🎯 Otomatik</div>
+              <div class="select-item" data-model="chatgpt" onclick="pickModel(this,'⚡ ChatGPT','chatgpt')">⚡ ChatGPT</div>
+              <div class="select-item" data-model="claude" onclick="pickModel(this,'🎭 Claude','claude')">🎭 Claude</div>
+              <div class="select-item" data-model="gemini" onclick="pickModel(this,'✨ Gemini','gemini')">✨ Gemini</div>
+              <div class="select-item" data-model="deepseek" onclick="pickModel(this,'🔬 DeepSeek','deepseek')">🔬 DeepSeek</div>
+            </div>
+          </div>
         </div>
         <div class="right-btns">
-          <button class="stop-btn" id="stopBtn" onclick="stopSpeaking()">⏹ Dur</button>
+          <button class="stop-btn" id="stopBtn" onclick="stopSpeaking()">⏹</button>
           <button class="mic-btn" id="micBtn" onclick="toggleMic()">🎤</button>
           <button class="send-btn" id="sendBtn" onclick="run()">Sor →</button>
         </div>
@@ -310,7 +331,6 @@ let selectedModel='auto';
 let selectedMode='normal';
 let voiceEnabled=true;
 let debateEnabled=false;
-function toggleDebate(){debateEnabled=!debateEnabled;const b=document.getElementById('debateToggle');b.textContent=debateEnabled?'🥊 Tartışma Açık':'🥊 Tartışma Kapalı';b.classList.toggle('active',debateEnabled)}
 let history=JSON.parse(localStorage.getItem('bt_history')||'[]');
 let currentChatId=null;
 let mediaRecorder=null,audioChunks=[],isRecording=false;
@@ -322,6 +342,24 @@ const stopBtn=document.getElementById('stopBtn');
 const sidebar=document.getElementById('sidebar');
 const overlay=document.getElementById('overlay');
 
+// Theme
+const savedTheme=localStorage.getItem('bt_theme')||'light';
+document.body.dataset.theme=savedTheme;
+document.getElementById('themeBtn').textContent=savedTheme==='light'?'☀️':'🌙';
+function toggleTheme(){const t=document.body.dataset.theme==='light'?'dark':'light';document.body.dataset.theme=t;localStorage.setItem('bt_theme',t);document.getElementById('themeBtn').textContent=t==='light'?'☀️':'🌙'}
+
+function toggleDebate(){debateEnabled=!debateEnabled;document.getElementById('debateToggle').classList.toggle('active',debateEnabled)}
+function toggleVoice(){voiceEnabled=!voiceEnabled;document.getElementById('voiceToggle').classList.toggle('active',voiceEnabled);if(!voiceEnabled)stopSpeaking()}
+
+function toggleMenuDrop(id){
+  document.querySelectorAll('.select-menu').forEach(m=>{if(m.id!==id)m.classList.remove('open')});
+  document.getElementById(id).classList.toggle('open');
+}
+document.addEventListener('click',e=>{if(!e.target.closest('.select-wrap')){document.querySelectorAll('.select-menu').forEach(m=>m.classList.remove('open'))}});
+
+function pickMode(el,label,mode){selectedMode=mode;document.getElementById('modeBtn').textContent=label+' ▾';document.querySelectorAll('#modeMenu .select-item').forEach(i=>i.classList.remove('active'));el.classList.add('active');document.getElementById('modeMenu').classList.remove('open')}
+function pickModel(el,label,model){selectedModel=model;document.getElementById('modelBtn').textContent=label+' ▾';document.querySelectorAll('#modelMenu .select-item').forEach(i=>i.classList.remove('active'));el.classList.add('active');document.getElementById('modelMenu').classList.remove('open')}
+
 async function speak(text,model,elId){
   if(!voiceEnabled||!text)return;
   return new Promise(async(resolve)=>{
@@ -330,8 +368,7 @@ async function speak(text,model,elId){
       if(!r.ok){resolve();return}
       const blob=await r.blob();
       const url=URL.createObjectURL(blob);
-      const audio=new Audio(url);
-      currentAudio=audio;
+      const audio=new Audio(url);currentAudio=audio;
       if(elId){const el=document.getElementById(elId);if(el)el.classList.add('speaking')}
       stopBtn.classList.add('visible');
       audio.onended=()=>{if(elId){const el=document.getElementById(elId);if(el)el.classList.remove('speaking')}URL.revokeObjectURL(url);currentAudio=null;stopBtn.classList.remove('visible');resolve()};
@@ -341,7 +378,7 @@ async function speak(text,model,elId){
   });
 }
 function stopSpeaking(){if(currentAudio){currentAudio.pause();currentAudio=null}document.querySelectorAll('.step.speaking').forEach(e=>e.classList.remove('speaking'));stopBtn.classList.remove('visible')}
-function toggleVoice(){voiceEnabled=!voiceEnabled;const btn=document.getElementById('voiceToggle');btn.textContent=voiceEnabled?'🔊 Ses Açık':'🔇 Ses Kapalı';btn.classList.toggle('active',voiceEnabled);if(!voiceEnabled)stopSpeaking()}
+
 async function toggleMic(){
   if(isRecording){mediaRecorder.stop();return}
   try{
@@ -359,11 +396,10 @@ async function toggleMic(){
     mediaRecorder.start();isRecording=true;micBtn.classList.add('recording');micBtn.innerHTML='⏺';
   }catch(e){alert('Mikrofon izni: '+e.message)}
 }
+
 function autosize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,200)+'px'}
 function toggleMenu(){sidebar.classList.toggle('open');overlay.classList.toggle('show')}
-function setModel(m,btn){selectedModel=m;document.querySelectorAll('.model-select .chip').forEach(c=>c.classList.remove('active'));btn.classList.add('active')}
-function setMode(btn){selectedMode=btn.dataset.mode;document.querySelectorAll('.mode-chip').forEach(c=>c.classList.remove('active'));btn.classList.add('active')}
-function newChat(){currentChatId=null;document.getElementById('q').value='';content.innerHTML='<div class="empty"><h2>👋 Yeni sohbet</h2><p>Sorunu yaz veya konuş.</p></div>';renderHistory();stopSpeaking();if(window.innerWidth<=768)toggleMenu()}
+function newChat(){currentChatId=null;document.getElementById('q').value='';content.innerHTML='<div class="empty"><h2>🧠 Yeni sohbet</h2><p>Sorunu yaz veya mikrofona bas.</p></div>';renderHistory();stopSpeaking();if(window.innerWidth<=768)toggleMenu()}
 function renderHistory(){const h=document.getElementById('history');h.innerHTML=history.slice().reverse().map(c=>`<div class="hist-item ${c.id===currentChatId?'active':''}" onclick="loadChat('${c.id}')">${escapeHtml(c.question.slice(0,40))}${c.question.length>40?'...':''}</div>`).join('')||'<div class="meta" style="padding:.5rem">Henüz yok</div>'}
 function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function loadChat(id){const c=history.find(x=>x.id===id);if(!c)return;currentChatId=id;content.innerHTML=c.html;renderHistory();if(window.innerWidth<=768)toggleMenu()}
@@ -375,51 +411,49 @@ async function run(){
   const q=document.getElementById('q').value.trim();if(!q)return;
   content.innerHTML='';sendBtn.disabled=true;sendBtn.innerHTML='<span class="spinner"></span>';
   stopSpeaking();
-  const modeIcons={normal:'💬',research:'🔍',ideas:'💡',critique:'⚔️',roadmap:'🗺️',report:'📊'};
-  const modeNames={normal:'Normal',research:'Araştırma',ideas:'Fikir Üret',critique:'Eleştir',roadmap:'Yol Haritası',report:'Rapor'};
   try{
     let chosen,name,reason,color,icon;
     if(selectedModel==='auto'){
       loading('s1','🎯 Yönlendirme');
       const r1=await api('/api/route',{question:q});
       chosen=r1.chosen;name=r1.name;reason=r1.reason;color=r1.color;icon=r1.icon;
-      step('s1','🎯 Yönlendirme',reason,modeIcons[selectedMode]+' '+modeNames[selectedMode]+' • '+name,color);
+      step('s1','🎯 Yönlendirme',reason,name,color);
     }else{
       chosen=selectedModel;
       name={chatgpt:'ChatGPT',claude:'Claude',gemini:'Gemini',deepseek:'DeepSeek'}[chosen];
       color={chatgpt:'#10a37f',claude:'#c87557',gemini:'#4285f4',deepseek:'#7c3aed'}[chosen];
       icon={chatgpt:'⚡',claude:'🎭',gemini:'✨',deepseek:'🔬'}[chosen];
-      step('s1','🎯 Manuel Seçim','Bu modeli sen seçtin.',modeIcons[selectedMode]+' '+modeNames[selectedMode]+' • '+name,color);
+      step('s1','🎯 Manuel',name,'Sen seçtin',color);
     }
     loading('s2',icon+' '+name);
     const r2=await api('/api/answer',{question:q,model:chosen,mode:selectedMode});
-    step('s2',icon+' '+name+' cevaplıyor',r2.answer,'Ana Cevap',color);
+    step('s2',icon+' '+name,r2.answer,'Ana Cevap',color);
     await speak(r2.answer,chosen,'s2');
     const critics=['chatgpt','claude','gemini','deepseek'].filter(m=>m!==chosen);
     const critiques={};
     for(const critic of critics){
       const cid='c_'+critic;
-      loading(cid,'🔍 '+critic.charAt(0).toUpperCase()+critic.slice(1)+' eleştiriyor');
+      loading(cid,'🔍 '+critic.charAt(0).toUpperCase()+critic.slice(1));
       try{
         const cr=await api('/api/critique_one',{question:q,answer:r2.answer,critic});
-        step(cid,cr.icon+' '+cr.name+' eleştirisi',cr.text,'Eleştiri',cr.color);
+        step(cid,cr.icon+' '+cr.name,cr.text,'Eleştiri',cr.color);
         critiques[critic]={name:cr.name,text:cr.text};
         await speak(cr.text,critic,cid);
-      }catch(e){step(cid,'⚠️ '+critic,'Bu model şu an cevap veremedi.','Eleştiri')}
+      }catch(e){}
     }
     if(debateEnabled){
       loading('d1',icon+' '+name+' savunuyor');
       try{
         const dr=await api('/api/defend',{question:q,answer:r2.answer,critiques,primary:chosen});
-        step('d1',dr.icon+' '+dr.name+' savunması',dr.text,'Savunma',dr.color);
+        step('d1',dr.icon+' '+dr.name,dr.text,'Savunma',dr.color);
         await speak(dr.text,chosen,'d1');
         const round2={};
         for(const critic of critics){
           const cid2='r2_'+critic;
-          loading(cid2,'⚔️ '+critic.charAt(0).toUpperCase()+critic.slice(1)+' 2. tur');
+          loading(cid2,'⚔️ '+critic+' 2. tur');
           try{
             const cr2=await api('/api/critique_round2',{question:q,answer:r2.answer,defense:dr.text,critic});
-            step(cid2,cr2.icon+' '+cr2.name+' (2. tur)',cr2.text,'2. Tur',cr2.color);
+            step(cid2,cr2.icon+' '+cr2.name,cr2.text,'2. Tur',cr2.color);
             round2[critic]={name:cr2.name,text:cr2.text};
             await speak(cr2.text,critic,cid2);
           }catch(e){}
