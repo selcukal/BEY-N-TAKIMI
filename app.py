@@ -26,6 +26,7 @@ MODES = {
     "roadmap":   {"name": "Yol Haritası", "icon": "🗺️", "prompt": "Sen bir strateji uzmanisin. Soruyu/hedefi adim adim bir yol haritasina cevir. Asamali plan, tarihler, oncelikler ve kontrol noktalari sun."},
     "report":    {"name": "Rapor",        "icon": "📊", "prompt": "Sen bir analistsin. Konu hakkinda profesyonel bir rapor yaz: ozet, mevcut durum, analiz, sonuc ve oneriler bolumleriyle."},
     "startup":   {"name": "Startup",      "icon": "🚀", "prompt": "Sen tecrubeli bir girisimcilik mentorisin. Kullanicinin fikrini ya da sorusunu girisimci gozuyle ele al. 1) Fikrin gucu/zayifligi 2) Hedef kitle 3) Gelir modeli 4) Rakipler 5) Ilk 3 adim 6) Riskler 7) Kaynaklar. Sicak, motive edici, gercekci. Yagcilik yapma."},
+    "ultra":     {"name": "Ultra",        "icon": "⚡🔥", "prompt": "Sen ultra kapsamli bir uzmansin. Konuyu her aciyla ele al: 1) Derinlemesine arastirma ve analiz 2) Yaratici fikirler ve alternatifler 3) Elestirel bakis ve riskler 4) Adim adim yol haritasi 5) Profesyonel rapor 6) Girisimci perspektifi. Kapsamli, detayli, net ve aksiyona donuk cevap ver."},
 }
 
 def ask_chatgpt(system, user):
@@ -87,9 +88,15 @@ def api_route():
 @app.route("/api/answer", methods=["POST"])
 def api_answer():
     d = request.json
-    q, model, mode = d.get("question","").strip(), d.get("model",""), d.get("mode","normal")
+    q, model = d.get("question","").strip(), d.get("model","")
+    modes = d.get("modes", ["normal"])
     if not q or model not in MODELS: return jsonify({"error":"Eksik"}), 400
-    prompt = MODES.get(mode, MODES["normal"])["prompt"]
+    if len(modes) == 1:
+        prompt = MODES.get(modes[0], MODES["normal"])["prompt"]
+    else:
+        prompts = [MODES.get(m, MODES["normal"])["prompt"] for m in modes]
+        combined = " ".join(prompts)
+        prompt = f"Sen cok yetenekli bir uzmansin. Asagidaki talimatlarin HEPSINI ayni anda uygula: {combined}"
     try:
         ans = MODELS[model](prompt, q)
         return jsonify({"answer": ans})
@@ -274,11 +281,15 @@ textarea{width:100%;background:transparent;border:none;color:var(--text);font-si
 .model-check input{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
 .export-btn{background:transparent;border:1px solid var(--border);color:var(--text);padding:.4rem .7rem;border-radius:10px;cursor:pointer;font-size:.8rem;display:flex;align-items:center;gap:.3rem}
 .export-btn:hover{background:var(--panel)}
+.ultra-item{background:linear-gradient(135deg,#f97316,#c87557);color:#fff!important;font-weight:600;border-radius:8px;margin-top:.3rem}
+.ultra-item:hover{opacity:.9}
+.ultra-item.active{box-shadow:0 0 0 2px #f97316}
 </style></head><body data-theme="light">
 <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
 <aside class="sidebar" id="sidebar">
   <button class="new-btn" onclick="newChat()">+ Yeni Sohbet</button>
   <button class="export-btn" onclick="exportChat()">📥 Sohbeti İndir</button>
+  <button class="export-btn" style="margin-top:.3rem" onclick="requestFeature()">✨ Özellik İste</button>
   <h2>Geçmiş</h2>
   <div id="history"></div>
 </aside>
@@ -315,13 +326,14 @@ textarea{width:100%;background:transparent;border:none;color:var(--text);font-si
           <div class="select-wrap">
             <button class="select-btn" id="modeBtn" onclick="toggleMenuDrop('modeMenu')">💬 Normal ▾</button>
             <div class="select-menu" id="modeMenu">
-              <div class="select-item active" data-mode="normal" onclick="pickMode(this,'💬 Normal','normal')">💬 Normal</div>
-              <div class="select-item" data-mode="research" onclick="pickMode(this,'🔍 Araştırma','research')">🔍 Araştırma</div>
-              <div class="select-item" data-mode="ideas" onclick="pickMode(this,'💡 Fikir','ideas')">💡 Fikir Üret</div>
-              <div class="select-item" data-mode="critique" onclick="pickMode(this,'⚔️ Eleştir','critique')">⚔️ Eleştir</div>
-              <div class="select-item" data-mode="roadmap" onclick="pickMode(this,'🗺️ Yol H.','roadmap')">🗺️ Yol Haritası</div>
-              <div class="select-item" data-mode="report" onclick="pickMode(this,'📊 Rapor','report')">📊 Rapor</div>
-              <div class="select-item" data-mode="startup" onclick="pickMode(this,'🚀 Startup','startup')">🚀 Startup</div>
+              <div class="select-item active" data-mode="normal" onclick="toggleModeMulti(this,'normal')">💬 Normal</div>
+              <div class="select-item" data-mode="research" onclick="toggleModeMulti(this,'research')">🔍 Araştırma</div>
+              <div class="select-item" data-mode="ideas" onclick="toggleModeMulti(this,'ideas')">💡 Fikir Üret</div>
+              <div class="select-item" data-mode="critique" onclick="toggleModeMulti(this,'critique')">⚔️ Eleştir</div>
+              <div class="select-item" data-mode="roadmap" onclick="toggleModeMulti(this,'roadmap')">🗺️ Yol Haritası</div>
+              <div class="select-item" data-mode="report" onclick="toggleModeMulti(this,'report')">📊 Rapor</div>
+              <div class="select-item" data-mode="startup" onclick="toggleModeMulti(this,'startup')">🚀 Startup</div>
+              <div class="select-item ultra-item" data-mode="ultra" onclick="pickUltra(this)">⚡🔥 Ultra (Hepsi)</div>
             </div>
           </div>
           <div class="select-wrap">
@@ -444,7 +456,7 @@ async function run(){
       step('s1','🎯 Manuel',name,'Sen seçtin',color);
     }
     loading('s2',icon+' '+name);
-    const r2=await api('/api/answer',{question:q,model:chosen,mode:selectedMode});
+    const r2=await api('/api/answer',{question:q,model:chosen,modes:selectedModes});
     step('s2',icon+' '+name,r2.answer,'Ana Cevap',color);
     await speak(r2.answer,chosen,'s2');
     const critics=activeModels.filter(m=>m!==chosen);
@@ -490,6 +502,43 @@ async function run(){
 }
 document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();run()}});
 
+// Çoklu mod seçimi
+let selectedModes=['normal'];
+let isUltra=false;
+
+function toggleModeMulti(el,mode){
+  isUltra=false;
+  document.querySelector('.ultra-item').classList.remove('active');
+  if(el.classList.contains('active')&&selectedModes.length>1){
+    el.classList.remove('active');
+    selectedModes=selectedModes.filter(m=>m!==mode);
+  }else{
+    el.classList.add('active');
+    if(!selectedModes.includes(mode))selectedModes.push(mode);
+  }
+  updateModeBtn();
+}
+
+function pickUltra(el){
+  isUltra=true;
+  selectedModes=['ultra'];
+  document.querySelectorAll('#modeMenu .select-item').forEach(i=>i.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('modeBtn').textContent='⚡🔥 Ultra ▾';
+  document.getElementById('modeMenu').classList.remove('open');
+  debateEnabled=true;
+  document.getElementById('debateToggle').classList.add('active');
+}
+
+function updateModeBtn(){
+  if(selectedModes.length===1){
+    const icons={normal:'💬 Normal',research:'🔍 Araştırma',ideas:'💡 Fikir',critique:'⚔️ Eleştir',roadmap:'🗺️ Yol H.',report:'📊 Rapor',startup:'🚀 Startup'};
+    document.getElementById('modeBtn').textContent=(icons[selectedModes[0]]||selectedModes[0])+' ▾';
+  }else{
+    document.getElementById('modeBtn').textContent=selectedModes.length+' Mod Seçili ▾';
+  }
+}
+
 // Model seçici
 let activeModels=['chatgpt','claude','gemini','deepseek'];
 function toggleModelsPanel(){document.getElementById('modelsPanel').classList.toggle('open')}
@@ -531,6 +580,13 @@ function exportChat(){
 }
 document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.shiftKey&&e.key.toLowerCase()==='m'){e.preventDefault();document.getElementById('q').focus();toggleMic()}});
 renderHistory();
+
+function requestFeature(){
+  const feat=prompt('Ne özellik eklemek istiyorsun? Açıkla:');
+  if(!feat||!feat.trim())return;
+  const msg=encodeURIComponent('Beyin Takımı uygulamama şu özelliği ekle: '+feat);
+  window.open('https://claude.ai/new?q='+msg,'_blank');
+}
 </script></body></html>"""
 
 if __name__ == "__main__":
