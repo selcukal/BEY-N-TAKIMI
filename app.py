@@ -265,7 +265,7 @@ textarea{width:100%;background:transparent;border:none;color:var(--text);font-si
 }
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
 .overlay.show{display:block}
-</style></head><body data-theme="light">
+</style></head><body data-theme="dark">
 <div class="overlay" id="ov" onclick="closeAll()"></div>
 <aside class="sidebar" id="sb">
   <button class="new-btn" onclick="newChat()">+ Yeni Sohbet</button>
@@ -345,14 +345,24 @@ var micBtn=document.getElementById('micBtn');
 var stopBtn=document.getElementById('stopBtn');
 
 // Theme
-var theme=localStorage.getItem('bt_theme')||'light';
+var theme=localStorage.getItem('bt_theme')||'dark';
 document.body.dataset.theme=theme;
 document.getElementById('themeBtn').textContent=theme==='light'?'☀️':'🌙';
 function toggleTheme(){theme=theme==='light'?'dark':'light';document.body.dataset.theme=theme;localStorage.setItem('bt_theme',theme);document.getElementById('themeBtn').textContent=theme==='light'?'☀️':'🌙';}
 
 // Dropdown
 function toggleDrop(id){document.querySelectorAll('.sel-menu').forEach(function(m){if(m.id!==id)m.classList.remove('open');});document.getElementById(id).classList.toggle('open');}
-document.addEventListener('click',function(e){if(!e.target.closest('.sel-wrap')){document.querySelectorAll('.sel-menu').forEach(function(m){m.classList.remove('open');});}});
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.sel-wrap')){
+    document.querySelectorAll('.sel-menu').forEach(function(m){m.classList.remove('open');});
+  }
+});
+function toggleDrop(id){
+  event.stopPropagation();
+  var isOpen=document.getElementById(id).classList.contains('open');
+  document.querySelectorAll('.sel-menu').forEach(function(m){m.classList.remove('open');});
+  if(!isOpen)document.getElementById(id).classList.add('open');
+}
 
 // Mode
 function pickMode(el){
