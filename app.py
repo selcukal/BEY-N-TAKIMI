@@ -266,10 +266,19 @@ textarea{width:100%;background:transparent;border:none;color:var(--text);font-si
 }
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
 .overlay.show{display:block}
+.models-panel{display:none;position:absolute;top:60px;right:1rem;background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:1rem;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:200;min-width:200px}
+.models-panel.open{display:block}
+.models-title{font-weight:600;font-size:.85rem;margin-bottom:.6rem;color:var(--text)}
+.model-check{display:flex;align-items:center;gap:.5rem;padding:.4rem .3rem;font-size:.9rem;cursor:pointer;border-radius:8px}
+.model-check:hover{background:var(--panel)}
+.model-check input{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
+.export-btn{background:transparent;border:1px solid var(--border);color:var(--text);padding:.4rem .7rem;border-radius:10px;cursor:pointer;font-size:.8rem;display:flex;align-items:center;gap:.3rem}
+.export-btn:hover{background:var(--panel)}
 </style></head><body data-theme="light">
 <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
 <aside class="sidebar" id="sidebar">
   <button class="new-btn" onclick="newChat()">+ Yeni Sohbet</button>
+  <button class="export-btn" onclick="exportChat()">📥 Sohbeti İndir</button>
   <h2>Geçmiş</h2>
   <div id="history"></div>
 </aside>
@@ -279,8 +288,17 @@ textarea{width:100%;background:transparent;border:none;color:var(--text);font-si
     <h1>🧠 Beyin Takımı</h1>
     <div class="head-btns">
       <button class="icon-btn" id="themeBtn" onclick="toggleTheme()" title="Tema">☀️</button>
+      <button class="icon-btn" id="modelsToggle" onclick="toggleModelsPanel()" title="Modeller">🤖</button>
       <button class="icon-btn" id="debateToggle" onclick="toggleDebate()" title="Derin Tartışma">🥊</button>
       <button class="icon-btn active" id="voiceToggle" onclick="toggleVoice()" title="Ses">🔊</button>
+    </div>
+    <div class="models-panel" id="modelsPanel">
+      <div class="models-title">Katılacak Modeller</div>
+      <label class="model-check"><input type="checkbox" id="mc_chatgpt" checked onchange="updateModels()"> ⚡ ChatGPT</label>
+      <label class="model-check"><input type="checkbox" id="mc_claude" checked onchange="updateModels()"> 🎭 Claude</label>
+      <label class="model-check"><input type="checkbox" id="mc_gemini" checked onchange="updateModels()"> ✨ Gemini</label>
+      <label class="model-check"><input type="checkbox" id="mc_deepseek" checked onchange="updateModels()"> 🔬 DeepSeek</label>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:.5rem">En az 2 model seçili olmalı</div>
     </div>
   </header>
   <div class="content" id="content">
@@ -429,7 +447,7 @@ async function run(){
     const r2=await api('/api/answer',{question:q,model:chosen,mode:selectedMode});
     step('s2',icon+' '+name,r2.answer,'Ana Cevap',color);
     await speak(r2.answer,chosen,'s2');
-    const critics=['chatgpt','claude','gemini','deepseek'].filter(m=>m!==chosen);
+    const critics=activeModels.filter(m=>m!==chosen);
     const critiques={};
     for(const critic of critics){
       const cid='c_'+critic;
@@ -471,6 +489,46 @@ async function run(){
   }catch(e){step('err','⚠️ Hata',e.message)}finally{sendBtn.disabled=false;sendBtn.innerHTML='Sor →'}
 }
 document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();run()}});
+
+// Model seçici
+let activeModels=['chatgpt','claude','gemini','deepseek'];
+function toggleModelsPanel(){document.getElementById('modelsPanel').classList.toggle('open')}
+document.addEventListener('click',e=>{if(!e.target.closest('#modelsPanel')&&!e.target.closest('#modelsToggle')){document.getElementById('modelsPanel').classList.remove('open')}});
+function updateModels(){
+  const all=['chatgpt','claude','gemini','deepseek'];
+  const selected=all.filter(m=>document.getElementById('mc_'+m).checked);
+  if(selected.length<2){alert('En az 2 model seçili olmalı!');event.target.checked=true;return}
+  activeModels=selected;
+}
+
+// Dışa aktarma
+function exportChat(){
+  if(!currentChatId){alert('Önce bir sohbet açın!');return}
+  const chat=history.find(x=>x.id===currentChatId);
+  if(!chat){alert('Sohbet bulunamadı!');return}
+  const tmp=document.createElement('div');
+  tmp.innerHTML=chat.html;
+  const steps=tmp.querySelectorAll('.step');
+  let text='BEYIN TAKIMI - Sohbet Kaydı\n';
+  text+='Tarih: '+new Date().toLocaleString('tr-TR')+'\n';
+  text+='Soru: '+chat.question+'\n';
+  text+='='+'='.repeat(50)+'\n\n';
+  steps.forEach(step=>{
+    const head=step.querySelector('.step-head');
+    const cont=step.querySelector('.step-content');
+    if(head&&cont){
+      text+=head.textContent.trim()+'\n';
+      text+='-'.repeat(40)+'\n';
+      text+=cont.textContent.trim()+'\n\n';
+    }
+  });
+  const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='beyin-takimi-'+Date.now()+'.txt';
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+}
 document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.shiftKey&&e.key.toLowerCase()==='m'){e.preventDefault();document.getElementById('q').focus();toggleMic()}});
 renderHistory();
 </script></body></html>"""
