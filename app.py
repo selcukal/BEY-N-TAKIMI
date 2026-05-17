@@ -357,12 +357,7 @@ document.addEventListener('click',function(e){
     document.querySelectorAll('.sel-menu').forEach(function(m){m.classList.remove('open');});
   }
 });
-function toggleDrop(id){
-  event.stopPropagation();
-  var isOpen=document.getElementById(id).classList.contains('open');
-  document.querySelectorAll('.sel-menu').forEach(function(m){m.classList.remove('open');});
-  if(!isOpen)document.getElementById(id).classList.add('open');
-}
+function toggleDrop(id){var m=document.getElementById(id);var wasOpen=m.classList.contains('open');document.querySelectorAll('.sel-menu').forEach(function(x){x.classList.remove('open');});if(!wasOpen)m.classList.add('open');}
 
 // Mode
 function pickMode(el){
